@@ -1,0 +1,20 @@
+tcp: switch to rhashtable for ehash
+
+The current implementation uses a static hash table for the ehash
+(connection hash). This becomes a bottleneck under high connection
+rates due to lock contention on the hash buckets.
+
+Switch to rhashtable which provides:
+- Lockless lookups on the read side
+- Automatic resizing based on load
+- Better memory utilization
+
+The rhashtable API requires some restructuring of the ehash
+insertion and deletion paths, but the lookup path becomes
+significantly simpler.
+
+Tested with 1M concurrent connections on a 64-core system.
+Connection setup rate improved from 150K/s to 280K/s.
+
+Signed-off-by: Author <author@example.com>
+Reviewed-by: Eric Dumazet <edumazet@google.com>

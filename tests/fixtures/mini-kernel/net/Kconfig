@@ -1,0 +1,47 @@
+config NET
+    bool "Networking support"
+    help
+      This option enables networking support.
+
+config INET
+    bool "TCP/IP networking"
+    depends on NET
+    help
+      This option enables TCP/IP networking.
+
+config NETFILTER
+    bool "Network packet filtering framework (Netfilter)"
+    depends on NET
+    help
+      This option enables Netfilter.
+
+config IP_NF_IPTABLES
+    bool "IP tables support"
+    depends on NETFILTER
+    help
+      This option enables IP tables.
+
+config TCP_CONG_ADVANCED
+    bool "Advanced TCP congestion controls"
+    depends on INET
+    help
+      This option enables advanced TCP congestion control algorithms.
+
+config TCP_CONG_BIC
+    bool "Binary Increase Congestion (BIC) control"
+    depends on TCP_CONG_ADVANCED
+    help
+      This option enables BIC TCP.
+
+config TCP_CONG_CUBIC
+    bool "CUBIC TCP"
+    default y
+    depends on TCP_CONG_ADVANCED
+    help
+      This option enables CUBIC TCP.
+
+config NET_RX_BUSY_POLL
+    bool "Busy polling on sockets"
+    depends on NET
+    help
+      This option enables busy polling on sockets for low latency.

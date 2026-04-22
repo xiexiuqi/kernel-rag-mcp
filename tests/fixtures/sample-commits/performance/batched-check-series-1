@@ -1,0 +1,15 @@
+[PATCH v3 1/3] mm: rmap: support batched checks of references for large folios
+
+Patch series "support batch checking of references and unmapping for large
+folios", v6.
+
+Currently, folio_referenced_one() always checks the young flag for each
+PTE sequentially, which is inefficient for large folios. This
+inefficiency is especially noticeable when reclaiming clean file-backed
+large folios, where folio_referenced() is observed as a significant
+performance hotspot.
+
+This patch adds batched checking of the young flags for large folios.
+
+Link: https://lore.kernel.org/linux-mm/20260209150724.12345-1-baolin.wang@linux.alibaba.com
+Signed-off-by: Baolin Wang <baolin.wang@linux.alibaba.com>

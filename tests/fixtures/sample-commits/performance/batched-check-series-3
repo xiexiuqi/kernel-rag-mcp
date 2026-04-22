@@ -1,0 +1,12 @@
+[PATCH v3 3/3] mm: rmap: optimize batched operations for contiguous PTEs
+
+This patch optimizes the batched operations for contiguous PTEs on
+architectures that support them (e.g., ARM64).
+
+By leveraging contiguous PTEs, we can further reduce the number of
+TLB flushes and improve cache utilization.
+
+This is patch 3 of 3 in the batched rmap series.
+
+Link: https://lore.kernel.org/linux-mm/20260209150724.12345-1-baolin.wang@linux.alibaba.com
+Signed-off-by: Baolin Wang <baolin.wang@linux.alibaba.com>

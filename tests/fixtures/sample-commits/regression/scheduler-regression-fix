@@ -1,0 +1,17 @@
+sched: fix regression in scheduler load balance
+
+After commit e4f5g6h ("sched: optimize load balance for NUMA"), we
+observed a regression in scheduler throughput on systems with
+asymmetric CPU capacities.
+
+The issue is that the NUMA optimization incorrectly assumes all
+NUMA nodes have similar CPU capacities. On systems with big.LITTLE
+or similar architectures, this leads to tasks being migrated to
+slower CPUs unnecessarily.
+
+Fix by checking CPU capacity before applying the NUMA fast path.
+
+Fixes: e4f5g6h ("sched: optimize load balance for NUMA")
+Reported-by: Test User <test@example.com>
+Signed-off-by: Author <author@example.com>
+Reviewed-by: Peter Zijlstra <peterz@infradead.org>

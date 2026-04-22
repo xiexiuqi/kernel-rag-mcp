@@ -1,0 +1,44 @@
+config SCHED_DEBUG
+    bool "Scheduler Debugging"
+    help
+      This option enables debugging output from the scheduler.
+      If you are unsure, say N.
+
+config SCHEDSTATS
+    bool "Collect scheduler statistics"
+    depends on SCHED_DEBUG
+    help
+      This feature enables the collection of scheduler statistics.
+
+config SMP
+    bool "Symmetric multi-processing support"
+    help
+      This enables support for systems with more than one CPU.
+
+config SCHED_MC
+    bool "Multi-core scheduler support"
+    depends on SMP
+    help
+      This option enables the multi-core scheduler.
+
+config SCHED_SMT
+    bool "SMT (Hyperthreading) scheduler support"
+    depends on SMP
+    help
+      This option enables the SMT scheduler.
+
+menu "Scheduler features"
+    depends on SMP
+
+config FAIR_GROUP_SCHED
+    bool "Group scheduling for SCHED_OTHER"
+    help
+      This feature lets you define CPU bandwidth allocation for groups.
+
+config RT_GROUP_SCHED
+    bool "Group scheduling for SCHED_RR/FIFO"
+    depends on FAIR_GROUP_SCHED
+    help
+      This feature lets you define CPU bandwidth allocation for RT groups.
+
+endmenu

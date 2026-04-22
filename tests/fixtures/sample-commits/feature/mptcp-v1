@@ -1,0 +1,19 @@
+net: add MPTCP v1 support
+
+This patch adds support for Multipath TCP v1 (RFC 8684) to the
+kernel networking stack.
+
+MPTCP allows a single TCP connection to use multiple paths
+simultaneously, providing:
+- Increased throughput through link aggregation
+- Seamless handover between networks
+- Improved resilience to link failures
+
+The implementation includes:
+- MPTCP option parsing and generation
+- Subflow management
+- Path manager interface
+- Scheduler for packet scheduling across subflows
+
+Signed-off-by: Author <author@example.com>
+Reviewed-by: Mat Martineau <mathew.j.martineau@linux.intel.com>

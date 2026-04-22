@@ -1,0 +1,12 @@
+Revert "tcp: change RTO calculation"
+
+This reverts commit d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7.
+
+The RTO change introduced in the above commit causes connection
+stalls on high-latency satellite links. The issue is that the
+new RTO calculation is too aggressive and triggers spurious
+retransmissions.
+
+Revert to the previous RTO calculation until a better fix is found.
+
+Signed-off-by: Author <author@example.com>

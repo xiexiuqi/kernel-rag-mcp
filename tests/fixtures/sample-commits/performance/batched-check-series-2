@@ -1,0 +1,9 @@
+[PATCH v3 2/3] mm: rmap: support batched unmapping for file large folios
+
+Similar to folio_referenced_one(), we can apply batched unmapping for file
+large folios to optimize the performance of file folios reclamation.
+
+This is patch 2 of 3 in the batched rmap series.
+
+Link: https://lore.kernel.org/linux-mm/20260209150724.12345-1-baolin.wang@linux.alibaba.com
+Signed-off-by: Baolin Wang <baolin.wang@linux.alibaba.com>

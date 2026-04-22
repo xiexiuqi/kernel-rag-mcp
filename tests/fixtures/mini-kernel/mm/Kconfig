@@ -1,0 +1,46 @@
+config MMU
+    bool "Memory Management Unit"
+    default y
+    help
+      This option enables the memory management unit.
+
+config SWAP
+    bool "Support for paging of anonymous memory (swap)"
+    depends on MMU
+    help
+      This option allows you to choose whether to support swapping.
+
+config NUMA
+    bool "NUMA Memory Allocation and Scheduler Support"
+    depends on SMP
+    help
+      This option enables NUMA support.
+
+config NUMA_BALANCING
+    bool "NUMA_BALANCING"
+    depends on NUMA
+    help
+      This option enables automatic NUMA balancing.
+
+config COMPACTION
+    bool "Allow for memory compaction"
+    help
+      This option enables memory compaction.
+
+config MIGRATION
+    bool "Page migration"
+    depends on NUMA || COMPACTION
+    help
+      This option enables page migration.
+
+config KSM
+    bool "Enable KSM for page merging"
+    depends on MMU
+    help
+      This option enables the kernel samepage merging.
+
+config DEFAULT_MMAP_MIN_ADDR
+    hex "Low address space to protect from user allocation"
+    default 4096
+    help
+      This option sets the minimum address for mmap.

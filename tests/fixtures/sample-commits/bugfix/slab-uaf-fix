@@ -1,0 +1,15 @@
+mm: fix use-after-free in slab allocator
+
+A race condition in the slab allocator can lead to use-after-free
+when kmem_cache_free() is called concurrently with cache shrinking.
+
+The issue is that the object is returned to the per-cpu list before
+the page reference count is updated, allowing another CPU to reclaim
+the page while the object is still in use.
+
+Fix by updating the page reference count before adding the object
+to the per-cpu list.
+
+Fixes: abc123 ("mm: optimize slab allocation path")
+Cc: stable@vger.kernel.org # 5.15+, 6.1+
+Signed-off-by: Author <author@example.com>
