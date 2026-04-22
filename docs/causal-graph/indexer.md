@@ -29,6 +29,9 @@
 | **Regression:** | 标题含 "regression" | 标记回归问题 | `IS_REGRESSION` |
 | **Revert** | `Revert "xxx"` | 回滚某个提交 | `REVERTS →` |
 | **cherry-picked from** | `(cherry picked from commit ...)` | stable 树 backport | `CHERRY_PICK_FROM →` |
+| **Feature:** | `Feature: feat_xxx` | 关联到特性主题 | `BELONGS_TO →` |
+| **Optimizes:** | 隐含：同一特性下的性能优化 | 特性演进关系 | `OPTIMIZES →` |
+| **Introduces:** | 隐含：特性初始引入 | 特性起始点 | `INTRODUCES →` |
 
 ---
 
@@ -56,10 +59,13 @@ commit_node = {
 
 # 边构建
 edges = [
-    ("e33f3b9...", "FIXES", "a1b2c3d..."),      # 修复关系
-    ("e33f3b9...", "REPORTED_BY", "John Doe"),    # 报告关系
-    ("e33f3b9...", "REVIEWED_BY", "David Miller"), # 审查关系
-    ("stable-5.15", "CHERRY_PICK_FROM", "e33f3b9..."), # backport 关系
+    ("e33f3b9...", "FIXES", "a1b2c3d..."),           # 修复关系
+    ("e33f3b9...", "REPORTED_BY", "John Doe"),         # 报告关系
+    ("e33f3b9...", "REVIEWED_BY", "David Miller"),      # 审查关系
+    ("stable-5.15", "CHERRY_PICK_FROM", "e33f3b9..."),  # backport 关系
+    ("e4f5g6h...", "OPTIMIZES", "feat_sched_percpu_vruntime"),  # 特性优化
+    ("a1b2c3d...", "INTRODUCES", "feat_sched_percpu_vruntime"), # 特性引入
+    ("i7j8k9l...", "FIXES_REGRESSION_IN", "e4f5g6h..."),        # 回归修复
 ]
 ```
 
@@ -76,6 +82,8 @@ edges = [
 | `git_regression_chain(subsys, since)` | 查询某子系统的回归链 | "最近一年 mm 子系统有哪些 regression" |
 | `git_patch_series(commit_hash)` | 查询补丁系列关系 | "这个 commit 属于哪个系列，前后 patch 是什么" |
 | `git_fixes_complete(commit_hash)` | 验证 Fixes 链完整性 | "这个修复是否完整覆盖了所有引入点" |
+| `git_feature_evolution(feature_id)` | 查询特性完整演进 | "per-CPU vruntime 特性的完整演进" |
+| `git_feature_performance_summary(feature_id)` | 查询特性性能汇总 | "这个特性总共提升了多少性能" |
 
 ---
 
@@ -110,6 +118,8 @@ edges = [
 - 审查 patch 时，自动查询该 patch 的 `Fixes:` 链，确认是否完整修复了问题根因
 - 分析回归时，追踪 `Introduced-by:` → `Fixes:` → `Revert` 的完整生命周期
 - 评估 backport 需求时，查询 `Cc: stable` 和 cherry-pick 关系
+- 追踪性能特性时，查询 `INTRODUCES` → `OPTIMIZES` → `FIXES_REGRESSION_IN` 的演进链
+- 分析性能优化影响时，查询特性关联的所有 commit 和量化指标
 
 ---
 

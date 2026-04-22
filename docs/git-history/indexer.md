@@ -20,6 +20,8 @@
 | **Commit 元数据** | `git log --format` | 作者、日期、标题、正文、变更文件列表 |
 | **Diff 摘要** | `git show --stat` + diff parser | 修改的函数名、增删行数、变更模式 |
 | **Diff 代码上下文** | `git show` + 上下文提取 | 变更前后的代码片段，用于语义 embedding |
+| **性能数据** | commit message 正则提取 | 延迟、吞吐、CPU 周期等量化指标 |
+| **特性关联** | 语义聚类 + 代码指纹 + 补丁系列 | 将相关补丁关联到同一特性主题 |
 | **Blame 行级映射** | `git blame -L`（当前 HEAD） | 精确回答"这行代码是谁引入的" |
 
 ---
@@ -32,8 +34,10 @@
 - 标题、正文
 - 变更文件列表
 - 变更函数列表
-- Patch 类型标签
+- Patch 类型标签（含性能补丁的多源融合信号）
 - 变更因果标签（Fixes:, Introduced-by: 等）
+- **性能数据**（如为性能补丁）：量化指标、benchmark 工具、测试环境
+- **特性关联**（如属于某特性）：feature_id、特性名称、在特性演进中的角色
 
 ### 3.2 Diff 上下文块
 
@@ -143,12 +147,18 @@ kernel-rag index-git --commits new_commits.txt --append-to v6.12
 kernel-rag index-causal --commits new_commits.txt
 # 提取 Fixes:, Introduced-by:, Cc: stable 等标签，更新图谱边
 
+# 5. 性能补丁索引增量：识别新增的性能补丁并提取数据
+kernel-rag index-performance --commits new_commits.txt
+# 多源融合识别、性能数据提取、特性关联更新
+
+# 6. 更新 Kconfig（如果 Kconfig 文件有变更）
+
 # 5. 更新 Kconfig（如果 Kconfig 文件有变更）
 if grep -q "Kconfig" changed_files.txt; then
     kextract && kclause  # 重新生成逻辑公式
 fi
 
-# 6. 生成 delta 目录（不修改 base，保持基线稳定）
+# 7. 生成 delta 目录（不修改 base，保持基线稳定）
 mkdir -p ~/.kernel-rag/repos/linux/v6.12/delta-$(git describe --tags $NEW_HEAD)
 # 将增量索引写入 delta 目录
 ```
