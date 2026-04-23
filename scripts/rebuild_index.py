@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import time
+import argparse
 from pathlib import Path
 
 sys.path.insert(0, '/mnt/data1/git/kernel-rag-mcp/src')
@@ -8,7 +9,11 @@ sys.path.insert(0, '/mnt/data1/git/kernel-rag-mcp/src')
 from kernel_rag_mcp.indexer.incremental_indexer import IncrementalIndexer
 
 def main():
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting incremental index update...")
+    parser = argparse.ArgumentParser(description='Rebuild or update kernel-rag index')
+    parser.add_argument('--force', action='store_true', help='Force full rebuild')
+    args = parser.parse_args()
+    
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting index update...")
     print("Model: jina-code-embeddings-0.5b")
     
     repo_path = Path('/mnt/data1/git/linux')
@@ -28,11 +33,23 @@ def main():
     import json
     metadata_file = index_root / 'v7.0-rc6' / 'base' / 'metadata.json'
     last_commit = None
-    if metadata_file.exists():
+    
+    if not args.force and metadata_file.exists():
         with open(metadata_file) as f:
             meta = json.load(f)
-        last_commit = meta.get('target')
-        print(f"Last indexed commit: {last_commit}")
+        # Check if model changed
+        if meta.get('embedding_model') == 'jina-code-0.5b':
+            last_commit = meta.get('target')
+            print(f"Last indexed commit: {last_commit}")
+        else:
+            print(f"Model changed from {meta.get('embedding_model')} to jina-code-0.5b, forcing rebuild")
+            args.force = True
+    else:
+        args.force = True
+    
+    if args.force:
+        print("Force rebuild requested")
+        last_commit = None
     
     result = indexer.update_index(
         base='v7.0-11782-gc1f49dea2b8f',

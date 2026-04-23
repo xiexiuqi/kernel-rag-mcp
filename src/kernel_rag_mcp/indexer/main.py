@@ -45,9 +45,18 @@ class Indexer:
             count = sum(1 for c in all_chunks if c.subsys == subsys)
             print(f"  {subsys}: {count} chunks")
         
-        # Generate embeddings
+        # Generate embeddings in batches
+        batch_size = 100
+        all_embeddings = []
         texts = [f"{c.name} {c.code[:200]}" for c in all_chunks]
-        embeddings = self.embedder.encode(texts)
+        
+        print(f"Generating embeddings for {len(texts)} chunks in batches of {batch_size}...")
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i+batch_size]
+            batch_embs = self.embedder.encode(batch)
+            all_embeddings.extend(batch_embs)
+            if (i // batch_size) % 10 == 0:
+                print(f"  Progress: {i}/{len(texts)} chunks")
         
         # Store in Qdrant
         collection_name = "code_chunks"
@@ -58,7 +67,7 @@ class Indexer:
             chunk_id = f"{chunk.file_path}:{chunk.name}"
             vector_chunks.append({
                 "id": chunk_id,
-                "vector": embeddings[i],
+                "vector": all_embeddings[i],
                 "metadata": {
                     "name": chunk.name,
                     "file_path": chunk.file_path,
@@ -68,6 +77,7 @@ class Indexer:
                 }
             })
         
+        print(f"Inserting {len(vector_chunks)} vectors into Qdrant...")
         vector_store.insert(vector_chunks)
         
         # Store in sparse index
