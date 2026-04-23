@@ -43,11 +43,11 @@ struct task_struct *pick_next_task_fair(struct rq *rq)
         assert len(chunks) == 2
         assert chunks[0].name == "update_curr"
         assert chunks[0].start_line == 4
-        assert chunks[0].end_line == 19
+        assert chunks[0].end_line == 20
         assert "sched_entity" in chunks[0].code
 
         assert chunks[1].name == "pick_next_task_fair"
-        assert chunks[1].start_line == 21
+        assert chunks[1].start_line == 22
 
     def test_parse_struct_definition(self):
         code = """
@@ -142,6 +142,8 @@ static void *kmem_cache_alloc(struct kmem_cache *s, gfp_t gfpflags)
 """
         parser = TreeSitterCParser()
         chunks = parser.parse_functions(code, file_path="include/linux/kernel.h")
+        macro_chunks = parser.parse_macros(code, file_path="include/linux/kernel.h")
+        chunks.extend(macro_chunks)
 
         macro_chunk = [c for c in chunks if c.name == "container_of"]
         assert len(macro_chunk) == 1

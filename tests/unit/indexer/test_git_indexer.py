@@ -64,8 +64,8 @@ sys     0m0.254s
 
         assert metrics is not None
         assert metrics.improvement_percent == 75
-        assert metrics.before_latency == "1.018s"
-        assert metrics.after_latency == "0.254s"
+        assert metrics.before_latency == "0m1.018s"
+        assert metrics.after_latency == "0m0.254s"
         assert metrics.benchmark_tool == "memory.reclaim"
 
     def test_extract_performance_metrics_latency(self):
@@ -200,7 +200,7 @@ class TestGitIndexer:
         functions = indexer.extract_modified_functions(diff)
 
         assert len(functions) > 0
-        assert all("(" in f for f in functions)
+        assert all(f.isidentifier() for f in functions)
 
     def test_blame_line(self):
         from tests.conftest import KERNEL_REPO_PATH

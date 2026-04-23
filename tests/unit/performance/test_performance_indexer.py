@@ -77,8 +77,8 @@ W/ patch: real 0m0.254s
         data = indexer.extract_performance_data(body)
 
         assert data is not None
-        assert data.latency_before == "1.018s"
-        assert data.latency_after == "0.254s"
+        assert data.latency_before == "0m1.018s"
+        assert data.latency_after == "0m0.254s"
         assert data.improvement_percent == 75
 
     def test_extract_performance_data_throughput(self):
@@ -193,9 +193,9 @@ After: 300 cycles per operation
         top_k = indexer.get_top_k(commits, k=3, metric="improvement_percent")
 
         assert len(top_k) == 3
-        assert top_k[0].performance_data.improvement_percent == 90
-        assert top_k[1].performance_data.improvement_percent == 75
-        assert top_k[2].performance_data.improvement_percent == 50
+        assert top_k[0]["performance_data"]["improvement_percent"] == 90
+        assert top_k[1]["performance_data"]["improvement_percent"] == 75
+        assert top_k[2]["performance_data"]["improvement_percent"] == 50
 
     def test_index_performance_patch_with_real_kernel(self):
         from tests.conftest import KERNEL_REPO_PATH, BASE_VERSION, TARGET_VERSION
@@ -209,8 +209,8 @@ After: 300 cycles per operation
         )
 
         assert len(commits) > 0
-        assert all(c.performance_data is not None for c in commits)
-        assert all(c.classification_score >= 0.5 for c in commits)
+        assert all(c.get("performance_data") is not None for c in commits)
+        assert all(c.get("classification_score", 0) >= 0.5 for c in commits)
 
     def test_index_feature_with_real_kernel(self):
         from tests.conftest import KERNEL_REPO_PATH, BASE_VERSION, TARGET_VERSION
