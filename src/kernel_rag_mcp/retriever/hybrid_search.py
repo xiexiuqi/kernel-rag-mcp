@@ -51,17 +51,13 @@ class HybridSearcher:
         if not raw_path:
             return None
         nested_base = raw_path / "base"
-        has_nested_contents = (
-            (nested_base / "qdrant").exists()
-            or (nested_base / "metadata.db").exists()
-        )
-        if has_nested_contents:
+        if (nested_base / "qdrant").exists():
             return nested_base
-        has_base_contents = (
-            (raw_path / "qdrant").exists()
-            or (raw_path / "metadata.db").exists()
-        )
-        if has_base_contents:
+        if (raw_path / "qdrant").exists():
+            return raw_path
+        if (nested_base / "metadata.db").exists():
+            return nested_base
+        if (raw_path / "metadata.db").exists():
             return raw_path
         return raw_path
     
