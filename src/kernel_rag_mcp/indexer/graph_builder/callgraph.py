@@ -46,7 +46,7 @@ class CallGraphBuilder:
     def get_callers(self, symbol: str) -> List[str]:
         if not self.cscope_db.exists():
             return []
-        
+
         try:
             result = subprocess.run(
                 ["cscope", "-d", "-L3", symbol],
@@ -54,14 +54,15 @@ class CallGraphBuilder:
                 capture_output=True,
                 text=True,
             )
-            
+
             callers = []
             for line in result.stdout.strip().split("\n"):
-                if line:
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        callers.append(parts[0])
-            
+                if not line:
+                    continue
+                parts = line.split()
+                if len(parts) >= 2:
+                    callers.append(parts[0])
+
             return list(set(callers))
         except Exception:
             return []
@@ -69,7 +70,7 @@ class CallGraphBuilder:
     def get_callees(self, symbol: str) -> List[str]:
         if not self.cscope_db.exists():
             return []
-        
+
         try:
             result = subprocess.run(
                 ["cscope", "-d", "-L2", symbol],
@@ -77,14 +78,15 @@ class CallGraphBuilder:
                 capture_output=True,
                 text=True,
             )
-            
+
             callees = []
             for line in result.stdout.strip().split("\n"):
-                if line:
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        callees.append(parts[0])
-            
+                if not line:
+                    continue
+                parts = line.split()
+                if len(parts) >= 2:
+                    callees.append(parts[0])
+
             return list(set(callees))
         except Exception:
             return []

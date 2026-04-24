@@ -30,7 +30,10 @@ class VectorStore:
             lock_file = self.path / ".lock"
             if lock_file.exists():
                 lock_file.unlink()
-            self._qdrant_client = QdrantClient(path=str(self.path))
+            self._qdrant_client = QdrantClient(
+                path=str(self.path),
+                force_disable_check_same_thread=True
+            )
         else:
             self._qdrant_client = QdrantClient(":memory:")
 

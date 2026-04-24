@@ -191,3 +191,31 @@ class TestMetadataStore:
 
         assert len(sched_chunks) == 1
         assert sched_chunks[0]["name"] == "a"
+
+    def test_symbols_storage(self, tmp_path):
+        store = MetadataStore(path=tmp_path)
+        symbols = [
+            {"name": "update_curr", "file_path": "kernel/sched/fair.c", "line": 100, "symbol_type": "function"},
+            {"name": "task_struct", "file_path": "include/linux/sched.h", "line": 50, "symbol_type": "struct"},
+        ]
+
+        store.save_symbols(symbols)
+        loaded = store.search_symbols("update_curr")
+
+        assert len(loaded) == 1
+        assert loaded[0]["name"] == "update_curr"
+        assert loaded[0]["symbol_type"] == "function"
+
+    def test_symbols_prefix_search(self, tmp_path):
+        store = MetadataStore(path=tmp_path)
+        symbols = [
+            {"name": "sched_init", "file_path": "kernel/sched/core.c", "line": 10, "symbol_type": "function"},
+            {"name": "schedule", "file_path": "kernel/sched/core.c", "line": 20, "symbol_type": "function"},
+            {"name": "page_alloc", "file_path": "mm/page_alloc.c", "line": 30, "symbol_type": "function"},
+        ]
+
+        store.save_symbols(symbols)
+        results = store.search_symbols_by_prefix("sched")
+
+        assert len(results) == 2
+        assert all(r["name"].startswith("sched") for r in results)

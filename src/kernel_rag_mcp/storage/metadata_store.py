@@ -113,3 +113,62 @@ class MetadataStore:
                 "SELECT value FROM index_metadata WHERE key = ?", (key,)
             ).fetchone()
             return row[0] if row else None
+    
+    def save_symbols(self, symbols: List[Dict[str, Any]]):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.executemany(
+                """INSERT OR REPLACE INTO symbols 
+                   (name, file_path, line, symbol_type)
+                   VALUES (?, ?, ?, ?)""",
+                [(s["name"], s["file_path"], s["line"], s.get("symbol_type"))
+                 for s in symbols]
+            )
+    
+    def search_symbols(self, name: str) -> List[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM symbols WHERE name = ?",
+                (name,)
+            ).fetchall()
+            return [dict(row) for row in rows]
+    
+    def search_symbols_by_prefix(self, prefix: str, limit: int = 100) -> List[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM symbols WHERE name LIKE ? LIMIT ?",
+                (f"{prefix}%", limit)
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def save_git_commits(self, commits: List[Dict[str, Any]]):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.executemany(
+                """INSERT OR REPLACE INTO git_commits
+                   (hash, title, author, date, message)
+                   VALUES (?, ?, ?, ?, ?)""",
+                [(c["hash"], c.get("title", ""), c.get("author", ""),
+                  c.get("date", ""), c.get("message", ""))
+                 for c in commits]
+            )
+
+    def search_git_commits(self, query: str = None, author: str = None, limit: int = 100) -> List[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            if query:
+                rows = conn.execute(
+                    "SELECT * FROM git_commits WHERE title LIKE ? OR message LIKE ? LIMIT ?",
+                    (f"%{query}%", f"%{query}%", limit)
+                ).fetchall()
+            elif author:
+                rows = conn.execute(
+                    "SELECT * FROM git_commits WHERE author = ? LIMIT ?",
+                    (author, limit)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM git_commits LIMIT ?",
+                    (limit,)
+                ).fetchall()
+            return [dict(row) for row in rows]

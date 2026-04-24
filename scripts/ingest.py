@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from kernel_rag_mcp.indexer.code_indexer import CodeIndexer
 from kernel_rag_mcp.indexer.embedders.siliconflow_embedder import SiliconFlowEmbedder
+from kernel_rag_mcp.indexer.symbol_indexer import SymbolIndexBuilder
 from kernel_rag_mcp.storage.vector_store import VectorStore
 from kernel_rag_mcp.storage.metadata_store import MetadataStore
 from kernel_rag_mcp.config import Config
@@ -48,6 +49,7 @@ def main():
     embedder = SiliconFlowEmbedder(api_key=api_key)
     vector_store = VectorStore(backend="qdrant", path=index_dir / "qdrant")
     metadata_store = MetadataStore(index_dir)
+    symbol_builder = SymbolIndexBuilder(repo_path)
     
     subsystems = ["kernel/sched", "mm", "net"]
     all_chunks = []
@@ -66,6 +68,18 @@ def main():
         print(f"  {subsys}: {len(result.chunks)} chunks")
     
     print(f"\nTotal chunks to index: {len(all_chunks)}")
+    
+    print("\nPhase 1b: Building symbol index...")
+    total_symbols = 0
+    for subsys in subsystems:
+        subsys_path = repo_path / subsys
+        if not subsys_path.exists():
+            continue
+        symbols = symbol_builder.index_subsystem(subsys_path)
+        metadata_store.save_symbols(symbols)
+        total_symbols += len(symbols)
+        print(f"  {subsys}: {len(symbols)} symbols")
+    print(f"  Total symbols: {total_symbols}")
     
     vector_store.create_collection("code_chunks", embedder.dim)
     

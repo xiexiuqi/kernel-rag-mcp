@@ -144,3 +144,37 @@ class GitIndexer:
     def get_commits_before(self, head: str) -> List[str]:
         output = self._run_git(["log", f"{head}~10..{head}", "--format=%H"])
         return [line.strip() for line in output.split("\n") if line.strip()]
+
+    def index_commits_to_store(self, metadata_store, since: str = "v7.0", limit: int = 1000):
+        log_output = self._run_git([
+            "log", since + "..HEAD",
+            "--format=%H|%s|%an|%ad|%b<END>",
+            "--date=short",
+            "-n", str(limit),
+        ])
+
+        commits = []
+        entries = log_output.split("<END>")
+        for entry in entries:
+            entry = entry.strip()
+            if not entry:
+                continue
+            lines = entry.split("\n", 4)
+            if len(lines) < 4:
+                continue
+            header = lines[0]
+            body = "\n".join(lines[4:]) if len(lines) > 4 else ""
+            parts = header.split("|", 4)
+            if len(parts) >= 4:
+                commits.append({
+                    "hash": parts[0],
+                    "title": parts[1],
+                    "author": parts[2],
+                    "date": parts[3],
+                    "message": body,
+                })
+
+        if commits:
+            metadata_store.save_git_commits(commits)
+
+        return len(commits)
