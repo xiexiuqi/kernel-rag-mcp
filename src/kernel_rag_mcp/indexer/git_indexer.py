@@ -180,30 +180,10 @@ class GitIndexer:
         return len(commits)
 
     def _classify_commit(self, commit: CommitEntry) -> List[str]:
-        title = commit.title.lower()
-        tags = []
-
-        if any(kw in title for kw in ["fix", "bug", "repair", "correct"]):
-            tags.append("bugfix")
-        if any(kw in title for kw in ["optim", "speedup", "fast", "latency", "throughput", "scale"]):
-            tags.append("performance")
-        if any(kw in title for kw in ["refactor", "cleanup", "simplify", "remove", "rework"]):
-            tags.append("refactor")
-        if any(kw in title for kw in ["add", "support", "implement", "introduce", "new"]):
-            tags.append("feature")
-        if title.startswith("revert"):
-            tags.append("revert")
-        if "regression" in title:
-            tags.append("regression")
-            tags.append("bugfix")
-        if any(kw in title for kw in ["doc", "comment", "docs:"]):
-            tags.append("documentation")
-        if any(kw in title for kw in ["selftest", "test", "kselftest"]):
-            tags.append("test")
-        if "cve" in title:
-            tags.append("security")
-
-        return tags
+        from .parsers.patch_type_classifier import PatchTypeClassifier
+        classifier = PatchTypeClassifier()
+        result = classifier.classify(commit.title, commit.body)
+        return result.tags
 
     def _extract_labels(self, body: str) -> dict:
         import re
