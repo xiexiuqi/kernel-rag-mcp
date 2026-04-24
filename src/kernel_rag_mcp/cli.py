@@ -82,6 +82,86 @@ def index(repo, subsystems, base, target):
 
 @cli.command()
 @click.option("--repo", "-r", required=True)
+@click.option("--from-commit", "-f")
+@click.option("--to-commit", "-t")
+@click.option("--subsystems", "-s")
+def update(repo, from_commit, to_commit, subsystems):
+    if not REPOS_JSON.exists():
+        click.echo("Error: Run `kernel-rag init` first", err=True)
+        return 1
+
+    with open(REPOS_JSON) as f:
+        repos = json.load(f)
+
+    if repo not in repos:
+        click.echo(f"Error: Repository '{repo}' not found", err=True)
+        return 1
+
+    repo_path = Path(repos[repo]["path"])
+
+    if not from_commit:
+        from_commit = repos[repo].get("version", "HEAD~1")
+    if not to_commit:
+        result = subprocess.run(
+            ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True
+        )
+        to_commit = result.stdout.strip()
+
+    if from_commit == to_commit:
+        click.echo("No changes detected (from_commit == to_commit)")
+        return 0
+
+    subsys_list = [s.strip() for s in subsystems.split(",")] if subsystems else ["kernel/sched", "mm", "net"]
+
+    click.echo(f"Updating {repo}: {from_commit[:8]}..{to_commit[:8]} subsystems={subsys_list}")
+
+    from kernel_rag_mcp.indexer.delta_indexer import DeltaIndexer
+    from kernel_rag_mcp.indexer.embedders.siliconflow_embedder import SiliconFlowEmbedder
+    import os
+
+    version = repos[repo].get("version", "v7.0")
+    version_ns = version
+    if version.startswith("v"):
+        parts = version.split(".")
+        if len(parts) >= 2:
+            version_ns = f"v{parts[0][1:]}.{parts[1].split('-')[0]}"
+
+    indexer = DeltaIndexer(
+        repo_path=repo_path,
+        index_root=DEFAULT_INDEX_ROOT / "repos" / repo,
+        version=version_ns,
+        subsystems=subsys_list
+    )
+
+    changed_files = indexer.detect_changes(from_commit, to_commit)
+    click.echo(f"Detected {len(changed_files)} changed files in tracked subsystems")
+
+    if not changed_files:
+        click.echo("No relevant changes to index")
+        return 0
+
+    api_key = os.environ.get("SILICONFLOW_API_KEY")
+    if not api_key:
+        click.echo("Error: SILICONFLOW_API_KEY not set", err=True)
+        return 1
+
+    embedder = SiliconFlowEmbedder(api_key=api_key)
+    delta_dir = indexer.build_delta(
+        changed_files=changed_files,
+        from_commit=from_commit,
+        to_commit=to_commit,
+        embedder=embedder
+    )
+
+    click.echo(f"Delta index created: {delta_dir}")
+
+    repos[repo]["version"] = to_commit
+    with open(REPOS_JSON, "w") as f:
+        json.dump(repos, f, indent=2)
+
+@cli.command()
+@click.option("--repo", "-r", required=True)
 @click.option("--query", "-q", required=True)
 @click.option("--top-k", "-k", default=5)
 def query(repo, query, top_k):

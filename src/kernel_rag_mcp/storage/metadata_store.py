@@ -49,7 +49,12 @@ class MetadataStore:
                     line INTEGER,
                     PRIMARY KEY (caller, callee, file_path, line)
                 );
-                
+
+                CREATE TABLE IF NOT EXISTS index_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_chunks_subsys ON chunks(subsys);
                 CREATE INDEX IF NOT EXISTS idx_chunks_file ON chunks(file_path);
                 CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);

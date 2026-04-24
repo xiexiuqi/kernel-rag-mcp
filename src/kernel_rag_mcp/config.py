@@ -19,6 +19,9 @@ class Config:
     def index_dir(self, version: str) -> Path:
         return self.index_root / version / "base"
 
+    def delta_dir(self, version: str, delta_name: str) -> Path:
+        return self.index_root / version / f"delta-{delta_name}"
+
     def get_version_ns(self, target: str) -> str:
         if target.startswith("v"):
             parts = target.split(".")
