@@ -53,7 +53,7 @@ class HybridSearcher:
             dim = store.get_metadata("embedding_dim")
             if model and dim:
                 from ..indexer.embedders.siliconflow_embedder import SiliconFlowEmbedder
-                if "siliconflow" in model:
+                if "siliconflow" in model or "bge-m3" in model:
                     return SiliconFlowEmbedder()
                 return CodeEmbedder(model_name=model, dim=int(dim))
         return CodeEmbedder(model_name="local", dim=768)

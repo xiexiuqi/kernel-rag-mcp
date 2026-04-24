@@ -108,6 +108,9 @@ def main():
         "embedding_dim": embedder.dim,
     })
     
+    if vector_store._qdrant_client:
+        vector_store._qdrant_client.close()
+    
     print(f"Indexing complete: {total} chunks")
 
 

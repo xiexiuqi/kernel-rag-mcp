@@ -81,10 +81,16 @@ class MetadataStore:
     def search_chunks_by_subsys(self, subsys: str, limit: int = 100) -> List[Dict[str, Any]]:
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                "SELECT * FROM chunks WHERE subsys = ? LIMIT ?",
-                (subsys, limit)
-            ).fetchall()
+            if subsys:
+                rows = conn.execute(
+                    "SELECT * FROM chunks WHERE subsys = ? LIMIT ?",
+                    (subsys, limit)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM chunks LIMIT ?",
+                    (limit,)
+                ).fetchall()
             return [dict(row) for row in rows]
     
     def save_metadata(self, metadata: Dict[str, Any]):
