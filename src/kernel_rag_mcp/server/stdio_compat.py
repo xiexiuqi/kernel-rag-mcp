@@ -1,6 +1,7 @@
 import asyncio
-import json
 import sys
+import threading
+from queue import Queue
 from contextlib import asynccontextmanager
 
 import anyio
@@ -8,80 +9,68 @@ from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStre
 import mcp.types as types
 from mcp.shared.message import SessionMessage
 
-
 @asynccontextmanager
 async def stdio_server_compat():
-    """
-    Stdio transport compatible with both Content-Length and newline-delimited JSON.
-    """
     read_stream_writer, read_stream = anyio.create_memory_object_stream(0)
     write_stream, write_stream_reader = anyio.create_memory_object_stream(0)
+    message_queue = Queue()
 
-    async def stdin_reader():
+    def stdin_thread():
+        try:
+            while True:
+                line = sys.stdin.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith("Content-Length:"):
+                    try:
+                        length = int(line.split(":", 1)[1].strip())
+                    except:
+                        continue
+                    sys.stdin.readline()  # empty
+                    body = sys.stdin.read(length)
+                    if not body:
+                        break
+                    try:
+                        msg = types.JSONRPCMessage.model_validate_json(body)
+                        message_queue.put(SessionMessage(msg))
+                    except Exception as exc:
+                        message_queue.put(exc)
+                    continue
+                try:
+                    msg = types.JSONRPCMessage.model_validate_json(line)
+                    message_queue.put(SessionMessage(msg))
+                except Exception as exc:
+                    message_queue.put(exc)
+        except:
+            pass
+
+    async def bridge():
         try:
             async with read_stream_writer:
-                stdin = anyio.wrap_file(sys.stdin)
                 while True:
                     try:
-                        line = await stdin.readline()
-                    except anyio.EndOfStream:
-                        break
-                    if not line:
-                        break
-
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    # Try Content-Length format
-                    if line.startswith("Content-Length:"):
-                        try:
-                            length = int(line.split(":", 1)[1].strip())
-                        except (ValueError, IndexError):
-                            continue
-                        # Read the empty line
-                        empty = await stdin.readline()
-                        if empty is None:
-                            break
-                        # Read the JSON body
-                        body = await stdin.read(length)
-                        if not body:
-                            break
-                        try:
-                            message = types.JSONRPCMessage.model_validate_json(body)
-                            session_message = SessionMessage(message)
-                            await read_stream_writer.send(session_message)
-                        except Exception as exc:
-                            await read_stream_writer.send(exc)
-                        continue
-
-                    # Try newline-delimited JSON
-                    try:
-                        message = types.JSONRPCMessage.model_validate_json(line)
-                        session_message = SessionMessage(message)
-                        await read_stream_writer.send(session_message)
-                    except Exception as exc:
-                        await read_stream_writer.send(exc)
-        except anyio.ClosedResourceError:
-            pass
-        except Exception:
+                        msg = message_queue.get(timeout=0.1)
+                        await read_stream_writer.send(msg)
+                    except:
+                        await asyncio.sleep(0.01)
+        except:
             pass
 
-    async def stdout_writer():
+    async def stdout():
         try:
             async with write_stream_reader:
-                stdout = anyio.wrap_file(sys.stdout)
-                async for session_message in write_stream_reader:
-                    json_str = session_message.message.model_dump_json(by_alias=True, exclude_none=True)
-                    # Use newline-delimited JSON for output
-                    await stdout.write(json_str + "\n")
-                    await stdout.flush()
-        except anyio.ClosedResourceError:
-            pass
-        except Exception:
+                async for sm in write_stream_reader:
+                    s = sm.message.model_dump_json(by_alias=True, exclude_none=True)
+                    sys.stdout.write(s + "\n")
+                    sys.stdout.flush()
+        except:
             pass
 
+    threading.Thread(target=stdin_thread, daemon=True).start()
     async with anyio.create_task_group() as tg:
-        tg.start_soon(stdin_reader)
-        tg.start_soon(stdout_writer)
+        tg.start_soon(bridge)
+        tg.start_soon(stdout)
         yield read_stream, write_stream
