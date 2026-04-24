@@ -14,7 +14,7 @@ def main():
         [sys.executable, "-m", "kernel_rag_mcp.server.mcp_server_internal"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=sys.stderr,
+        stderr=subprocess.DEVNULL,
         text=True,
     )
 
