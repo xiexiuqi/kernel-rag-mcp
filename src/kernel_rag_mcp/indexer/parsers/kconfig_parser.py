@@ -1,150 +1,176 @@
-import re
+import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Dict
 
 
-class KconfigSymbol:
-    def __init__(self, name: str, type_: str = "unknown", help_text: str = "", 
-                 default: str = "", depends_on: List[str] = None, 
-                 select: List[str] = None, imply: List[str] = None):
-        self.name = name
-        self.type = type_
-        self.help_text = help_text
-        self.default = default
-        self.depends_on = depends_on or []
-        self.select = select or []
-        self.imply = imply or []
+@dataclass
+class KconfigDesc:
+    name: str
+    type: str
+    help: str
+    default: str = ""
+
+
+@dataclass
+class KconfigCheckResult:
+    satisfiable: bool
+    conflicts: List[str]
 
 
 class KconfigParser:
-    def __init__(self, kconfig_path: Path):
-        self.kconfig_path = kconfig_path
-        self.symbols: Dict[str, KconfigSymbol] = {}
-    
-    def parse(self):
-        if not self.kconfig_path.exists():
-            return
-        
-        self._parse_file(self.kconfig_path)
-    
-    def _parse_file(self, path: Path):
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
+    SUBSYSTEM_MAP = {
+        "sched": "kernel/sched/Kconfig",
+        "mm": "mm/Kconfig",
+        "net": "net/Kconfig",
+    }
 
-        for match in re.finditer(r'source\s+"([^"]+)"', content):
-            raw = match.group(1)
-            if "$(SRCARCH)" in raw:
-                for arch in ["x86", "arm64", "arm", "riscv"]:
-                    sub_path = path.parent / raw.replace("$(SRCARCH)", arch)
-                    if sub_path.exists():
-                        self._parse_file(sub_path)
-                    else:
-                        alt = self.kconfig_path.parent / raw.replace("$(SRCARCH)", arch)
-                        if alt.exists():
-                            self._parse_file(alt)
-            else:
-                sub_path = path.parent / raw
-                if sub_path.exists():
-                    self._parse_file(sub_path)
-                else:
-                    alt = self.kconfig_path.parent / raw
-                    if alt.exists():
-                        self._parse_file(alt)
+    def __init__(self, repo_path: Path):
+        self.repo_path = Path(repo_path)
+        self._kconf = None
+        self.symbols: Dict[str, dict] = {}
 
-        config_pattern = r'config\s+(\w+)\s*\n((?:\s+(?:bool|tristate|string|hex|int|prompt|default|depends on|select|imply|help|comment|if|endif|menu|endmenu)[^\n]*\n)+)'
+    def _expr_to_str(self, expr) -> str:
+        if expr is None:
+            return ""
+        if hasattr(expr, 'str_value'):
+            return expr.str_value
+        if hasattr(expr, 'name'):
+            return expr.name
+        if isinstance(expr, tuple):
+            if len(expr) == 3:
+                op, left, right = expr
+                op_str = self._expr_to_str(op)
+                left_str = self._expr_to_str(left)
+                right_str = self._expr_to_str(right)
+                if op_str and left_str and right_str:
+                    return f"({left_str} {op_str} {right_str})"
+                return left_str or right_str or ""
+            elif len(expr) == 2:
+                op, operand = expr
+                op_str = self._expr_to_str(op)
+                operand_str = self._expr_to_str(operand)
+                if op_str and operand_str:
+                    return f"({op_str} {operand_str})"
+                return operand_str or ""
+        return str(expr)
 
-        for match in re.finditer(config_pattern, content):
-            name = match.group(1)
-            body = match.group(2)
+    def parse_subsystem(self, subsys: str) -> bool:
+        kconfig_file = self.SUBSYSTEM_MAP.get(subsys, f"{subsys}/Kconfig")
+        path = self.repo_path / kconfig_file
 
-            symbol = KconfigSymbol(name=name)
-
-            type_match = re.search(r'\s+(bool|tristate|string|hex|int)\s+(?:"([^"]+)"|(\w+))', body)
-            if type_match:
-                symbol.type = type_match.group(1)
-
-            default_match = re.search(r'\s+default\s+(\S+)', body)
-            if default_match:
-                symbol.default = default_match.group(1)
-
-            for dep_match in re.finditer(r'\s+depends on\s+(.+)', body):
-                symbol.depends_on.append(dep_match.group(1).strip())
-
-            for sel_match in re.finditer(r'\s+select\s+(\w+)', body):
-                symbol.select.append(sel_match.group(1))
-
-            for imp_match in re.finditer(r'\s+imply\s+(\w+)', body):
-                symbol.imply.append(imp_match.group(1))
-
-            help_match = re.search(r'\s+help\s*\n((?:\s+[^\n]*\n)+)', body)
-            if help_match:
-                symbol.help_text = help_match.group(1).strip()
-
-            self.symbols[name] = symbol
-    
-    def get_symbol(self, name: str) -> Optional[KconfigSymbol]:
-        return self.symbols.get(name)
-    
-    def get_all_deps(self, name: str) -> List[str]:
-        symbol = self.symbols.get(name)
-        if not symbol:
-            return []
-        
-        all_deps = set(symbol.depends_on)
-        for dep in symbol.depends_on:
-            dep_symbol = self.symbols.get(dep)
-            if dep_symbol:
-                all_deps.update(dep_symbol.depends_on)
-        
-        return list(all_deps)
-    
-    def check_config(self, config_dict: Dict[str, str]) -> Dict:
-        values = {}
-        for name, value in config_dict.items():
-            values[name] = value.upper()
-
-        seen = {}
-        for name, value in values.items():
-            if name in seen:
-                prev = seen[name]
-                if (prev in ["Y", "YES", "1"] and value in ["N", "NO", "0"]) or \
-                   (prev in ["N", "NO", "0"] and value in ["Y", "YES", "1"]):
-                    return {
-                        "satisfiable": False,
-                        "error": "Direct contradiction",
-                    }
-            seen[name] = value
+        if not path.exists():
+            return False
 
         try:
-            from z3 import Solver, Bool, Implies, sat
+            import kconfiglib
+            old_cwd = os.getcwd()
+            os.chdir(self.repo_path)
+            self._kconf = kconfiglib.Kconfig(str(path))
+            os.chdir(old_cwd)
 
-            solver = Solver()
-            bool_vars = {}
+            self.symbols = {}
+            for name, sym in self._kconf.syms.items():
+                try:
+                    if sym.nodes:
+                        node = sym.nodes[0]
+                        help_text = node.help if node.help else ""
+                        defaults = []
+                        for default, _ in sym.defaults:
+                            if hasattr(default, 'str_value'):
+                                defaults.append(default.str_value)
 
-            for name in config_dict:
-                bool_vars[name] = Bool(name)
+                        deps = []
+                        if sym.direct_dep is not None:
+                            dep_str = self._expr_to_str(sym.direct_dep)
+                            if dep_str and dep_str != "y":
+                                deps.append(dep_str)
 
-            for name, symbol in self.symbols.items():
-                if name in bool_vars:
-                    for dep in symbol.depends_on:
-                        if dep in bool_vars:
-                            solver.add(Implies(bool_vars[name], bool_vars[dep]))
+                        self.symbols[name] = {
+                            "name": name,
+                            "type": kconfiglib.TYPE_TO_STR[sym.type],
+                            "help": help_text,
+                            "defaults": defaults,
+                            "depends_on": deps,
+                        }
+                except Exception:
+                    continue
 
-            for name, value in config_dict.items():
-                if name in bool_vars:
-                    if value.upper() in ["Y", "YES", "1"]:
-                        solver.add(bool_vars[name] == True)
-                    elif value.upper() in ["N", "NO", "0"]:
-                        solver.add(bool_vars[name] == False)
+            return True
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            return False
 
-            result = solver.check()
+    def describe(self, config_name: str) -> Optional[KconfigDesc]:
+        if config_name.startswith("CONFIG_"):
+            config_name = config_name[7:]
 
-            return {
-                "satisfiable": result == sat,
-                "constraints": len(solver.assertions()),
-            }
-        except ImportError:
-            return {
-                "satisfiable": True,
-                "error": "Z3 not available",
-            }
+        sym = self.symbols.get(config_name)
+        if not sym:
+            return None
+
+        return KconfigDesc(
+            name=f"CONFIG_{config_name}",
+            type=sym.get("type", "unknown"),
+            help=sym.get("help", "")[:500],
+            default=sym.get("defaults", [""])[0] if sym.get("defaults") else "",
+        )
+
+    def get_dependencies(self, config_name: str) -> List[str]:
+        if config_name.startswith("CONFIG_"):
+            config_name = config_name[7:]
+
+        sym = self.symbols.get(config_name)
+        if not sym:
+            return []
+
+        return sym.get("depends_on", [])
+
+    def get_all_dependencies(self, config_name: str) -> List[str]:
+        direct = self.get_dependencies(config_name)
+        all_deps = set(direct)
+
+        for dep in direct:
+            if dep.startswith("CONFIG_"):
+                dep = dep[7:]
+            dep_sym = self.symbols.get(dep)
+            if dep_sym:
+                for d in dep_sym.get("depends_on", []):
+                    all_deps.add(d)
+
+        return list(all_deps)
+
+    def check_config(self, config_dict: Dict[str, str]) -> KconfigCheckResult:
+        conflicts = []
+        seen = {}
+
+        for name, value in config_dict.items():
+            clean_name = name[7:] if name.startswith("CONFIG_") else name
+            clean_value = value.upper()
+
+            if clean_name in seen:
+                prev = seen[clean_name]
+                if (prev in ["Y", "YES", "1"] and clean_value in ["N", "NO", "0"]) or \
+                   (prev in ["N", "NO", "0"] and clean_value in ["Y", "YES", "1"]):
+                    conflicts.append(f"{name} cannot be both {prev} and {clean_value}")
+            seen[clean_name] = clean_value
+
+        if not self._kconf:
+            return KconfigCheckResult(satisfiable=len(conflicts) == 0, conflicts=conflicts)
+
+        return KconfigCheckResult(satisfiable=len(conflicts) == 0, conflicts=conflicts)
+
+    def get_impact(self, config_name: str) -> List[str]:
+        if config_name.startswith("CONFIG_"):
+            config_name = config_name[7:]
+
+        impacted = []
+        for name, sym in self.symbols.items():
+            deps = sym.get("depends_on", [])
+            for dep in deps:
+                if config_name in dep or dep == config_name or dep == f"CONFIG_{config_name}":
+                    impacted.append(name)
+                    break
+
+        return impacted

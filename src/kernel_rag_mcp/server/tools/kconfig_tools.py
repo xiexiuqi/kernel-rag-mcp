@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from ...indexer.parsers.kconfig_parser import KconfigParser
+from ...indexer.parsers.kconfig_parser import KconfigParser as RealKconfigParser
 
 
 @dataclass
@@ -30,54 +30,58 @@ class KconfigImpact:
 
 
 class KconfigTools:
+    SUBSYSTEMS = ["sched", "mm", "net"]
+
     def __init__(self, repo_path: Path):
         self.repo_path = repo_path
-        self.parser = None
-        self._load_kconfig()
-    
-    def _load_kconfig(self):
-        kconfig_path = self.repo_path / "Kconfig"
-        if kconfig_path.exists():
-            self.parser = KconfigParser(kconfig_path)
-            self.parser.parse()
-    
+        self._parsers = {}
+        self._load_all_subsystems()
+
+    def _load_all_subsystems(self):
+        for subsys in self.SUBSYSTEMS:
+            parser = RealKconfigParser(self.repo_path)
+            if parser.parse_subsystem(subsys):
+                self._parsers[subsys] = parser
+
+    def _find_symbol(self, config_name: str):
+        for parser in self._parsers.values():
+            desc = parser.describe(config_name)
+            if desc:
+                return parser, desc
+        return None, None
+
     def kconfig_describe(self, config_name: str) -> Optional[KconfigDesc]:
-        if not self.parser:
-            return None
-        
-        symbol = self.parser.get_symbol(config_name)
-        if not symbol and config_name.startswith("CONFIG_"):
-            symbol = self.parser.get_symbol(config_name[7:])
-        if symbol:
+        parser, desc = self._find_symbol(config_name)
+        if desc:
             return KconfigDesc(
-                name=config_name,
-                type=symbol.type,
-                help=symbol.help_text[:200] if symbol.help_text else "",
-                default=symbol.default,
+                name=desc.name,
+                type=desc.type,
+                help=desc.help[:200],
+                default=desc.default,
             )
         return None
-    
+
     def kconfig_deps(self, config_name: str) -> KconfigDeps:
-        if not self.parser:
-            return KconfigDeps(direct_deps=[], all_deps=[])
-        
-        symbol = self.parser.get_symbol(config_name)
-        if not symbol and config_name.startswith("CONFIG_"):
-            symbol = self.parser.get_symbol(config_name[7:])
-        if symbol:
-            all_deps = self.parser.get_all_deps(config_name)
-            return KconfigDeps(direct_deps=symbol.depends_on, all_deps=all_deps)
-        
+        parser, desc = self._find_symbol(config_name)
+        if parser and desc:
+            direct = parser.get_dependencies(config_name)
+            all_deps = parser.get_all_dependencies(config_name)
+            return KconfigDeps(direct_deps=direct, all_deps=all_deps)
         return KconfigDeps(direct_deps=[], all_deps=[])
-    
+
     def kconfig_check(self, config_dict: dict) -> KconfigCheckResult:
-        if not self.parser:
-            return KconfigCheckResult(satisfiable=True)
-        
-        result = self.parser.check_config(config_dict)
-        return KconfigCheckResult(satisfiable=result.get("satisfiable", True))
-    
+        for parser in self._parsers.values():
+            result = parser.check_config(config_dict)
+            if not result.satisfiable:
+                return KconfigCheckResult(satisfiable=False)
+        return KconfigCheckResult(satisfiable=True)
+
     def kconfig_impact(self, config_name: str) -> KconfigImpact:
+        parser, desc = self._find_symbol(config_name)
+        if parser and desc:
+            impacted = parser.get_impact(config_name)
+            return KconfigImpact(affected_files=impacted[:20])
+
         import subprocess
         try:
             result = subprocess.run(
