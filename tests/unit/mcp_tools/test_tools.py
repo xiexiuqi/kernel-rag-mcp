@@ -85,7 +85,7 @@ class TestIntentRouter:
 
 class TestCodeTools:
     def test_kernel_search(self):
-        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_search("CFS vruntime update")
 
         assert len(result) > 0
@@ -93,7 +93,7 @@ class TestCodeTools:
         assert all(r.start_line > 0 for r in result)
 
     def test_kernel_define(self):
-        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_define("schedule")
 
         if result is None:
@@ -101,21 +101,21 @@ class TestCodeTools:
         assert result.file_path.endswith(".c") or result.file_path.endswith(".h")
 
     def test_kernel_callers(self):
-        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_callers("schedule", depth=1)
 
         assert len(result) > 0
         assert all(r.caller_name for r in result)
 
     def test_kernel_diff(self):
-        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_diff("update_curr", "v6.6", "v6.12")
 
         assert result is not None
         assert len(result.changes) >= 0
 
     def test_line_number_accuracy(self):
-        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_search("schedule()")
 
         assert len(result) > 0

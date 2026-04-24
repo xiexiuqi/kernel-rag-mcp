@@ -40,9 +40,9 @@ class TestHybridSearcher:
             {"chunk": {"name": "func_d"}, "score": 0.75, "rank": 3},
         ]
 
-        fused = searcher.rrf_fusion(dense_results, sparse_results, k=60)
+        fused = searcher._rrf_fusion(dense_results, sparse_results, k=60)
 
-        assert len(fused) == 3
+        assert len(fused) == 4
         assert all(f.score > 0 for f in fused)
 
     def test_kconfig_filter(self):
@@ -80,7 +80,7 @@ class TestHybridSearcher:
         if not KERNEL_REPO_PATH.exists():
             pytest.skip("Kernel repo not found at ~/linux")
 
-        index_path = Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6"
+        index_path = Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0"
         if not index_path.exists():
             pytest.skip("Index not found")
 
@@ -191,7 +191,7 @@ class TestContextAssembler:
         if not KERNEL_REPO_PATH.exists():
             pytest.skip("Kernel repo not found at ~/linux")
 
-        index_path = Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6"
+        index_path = Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0"
         if not index_path.exists():
             pytest.skip("Index not found")
 

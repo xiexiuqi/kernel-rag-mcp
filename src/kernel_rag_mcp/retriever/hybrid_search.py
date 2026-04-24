@@ -35,27 +35,48 @@ class HybridSearcher:
                     self.repo_path = Path(meta.get("repo_path", "."))
             
             self.vector_store = VectorStore(backend="qdrant", path=self.index_path / "base" / "qdrant")
-            self.sparse_store = SparseStore(backend="meilisearch", path=self.index_path / "base" / "meili")
+            self.vector_store.create_collection("code_chunks", self._load_dim())
+            self.sparse_store = SparseStore(path=self.index_path / "base" / "sparse")
             self.chunks = self._load_chunks()
         else:
             self.vector_store = VectorStore(backend="memory")
             self.sparse_store = SparseStore(backend="memory")
             self.chunks = []
         
-        self.embedder = CodeEmbedder()
+        self.embedder = self._load_embedder()
+    
+    def _load_embedder(self):
+        if self.index_path:
+            from ..storage.metadata_store import MetadataStore
+            store = MetadataStore(self.index_path / "base")
+            model = store.get_metadata("embedding_model")
+            dim = store.get_metadata("embedding_dim")
+            if model and dim:
+                from ..indexer.embedders.siliconflow_embedder import SiliconFlowEmbedder
+                if "siliconflow" in model:
+                    return SiliconFlowEmbedder()
+                return CodeEmbedder(model_name=model, dim=int(dim))
+        return CodeEmbedder(model_name="local", dim=768)
+
+    def _load_dim(self):
+        if self.index_path:
+            from ..storage.metadata_store import MetadataStore
+            store = MetadataStore(self.index_path / "base")
+            dim = store.get_metadata("embedding_dim")
+            if dim:
+                return int(dim)
+        return 768
     
     def _load_chunks(self) -> List[CodeChunk]:
         if not self.index_path:
             return []
-        chunks_file = self.index_path / "base" / "chunks.json"
-        if not chunks_file.exists():
-            return []
         
-        with open(chunks_file) as f:
-            data = json.load(f)
+        from ..storage.metadata_store import MetadataStore
+        store = MetadataStore(self.index_path / "base")
+        rows = store.search_chunks_by_subsys("", limit=1000000)
         
         chunks = []
-        for item in data:
+        for item in rows:
             chunks.append(CodeChunk(
                 name=item["name"],
                 file_path=item["file_path"],
@@ -136,22 +157,29 @@ class HybridSearcher:
     
     def _rrf_fusion(self, dense_results, sparse_results, k: int = 60):
         scores = {}
-        
-        # Dense results (semantic similarity)
+
+        def _get_id(r):
+            if hasattr(r, 'id'):
+                return r.id
+            if hasattr(r, 'symbol'):
+                return r.symbol
+            if isinstance(r, dict):
+                return r.get('id') or r.get('symbol') or r.get('chunk', {}).get('name', '')
+            return str(r)
+
         for rank, r in enumerate(dense_results):
-            scores[r.id] = scores.get(r.id, 0) + 1.0 / (k + rank + 1)
-        
-        # Sparse results (keyword match)
+            scores[_get_id(r)] = scores.get(_get_id(r), 0) + 1.0 / (k + rank + 1)
+
         for rank, r in enumerate(sparse_results):
-            scores[r.id] = scores.get(r.id, 0) + 1.0 / (k + rank + 1)
-        
+            scores[_get_id(r)] = scores.get(_get_id(r), 0) + 1.0 / (k + rank + 1)
+
         fused = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        
+
         class FusedResult:
             def __init__(self, id, score):
                 self.id = id
                 self.score = score
-        
+
         return [FusedResult(id, score) for id, score in fused]
     
     def _find_chunk(self, chunk_id: str) -> Optional[CodeChunk]:

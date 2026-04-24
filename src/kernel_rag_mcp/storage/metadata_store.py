@@ -1,75 +1,109 @@
-import json
+import sqlite3
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional, Dict, Any
 
 
 class MetadataStore:
     def __init__(self, path: Path):
-        self.path = Path(path)
-        self.metadata_file = self.path / "metadata.json"
+        self.path = path
+        self.db_path = path / "metadata.db"
+        self._init_db()
     
-    def save(self, metadata: dict):
-        self.path.mkdir(parents=True, exist_ok=True)
-        with open(self.metadata_file, "w") as f:
-            json.dump(metadata, f, indent=2)
+    def _init_db(self):
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS chunks (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    start_line INTEGER NOT NULL,
+                    end_line INTEGER NOT NULL,
+                    chunk_type TEXT,
+                    subsys TEXT,
+                    code_snippet TEXT
+                );
+                
+                CREATE TABLE IF NOT EXISTS symbols (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    line INTEGER NOT NULL,
+                    symbol_type TEXT,
+                    UNIQUE(name, file_path, line)
+                );
+                
+                CREATE TABLE IF NOT EXISTS git_commits (
+                    hash TEXT PRIMARY KEY,
+                    title TEXT,
+                    author TEXT,
+                    date TEXT,
+                    message TEXT,
+                    diff TEXT
+                );
+                
+                CREATE TABLE IF NOT EXISTS callgraph (
+                    caller TEXT NOT NULL,
+                    callee TEXT NOT NULL,
+                    file_path TEXT,
+                    line INTEGER,
+                    PRIMARY KEY (caller, callee, file_path, line)
+                );
+                
+                CREATE INDEX IF NOT EXISTS idx_chunks_subsys ON chunks(subsys);
+                CREATE INDEX IF NOT EXISTS idx_chunks_file ON chunks(file_path);
+                CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
+                CREATE INDEX IF NOT EXISTS idx_commits_author ON git_commits(author);
+                CREATE INDEX IF NOT EXISTS idx_callgraph_caller ON callgraph(caller);
+                CREATE INDEX IF NOT EXISTS idx_callgraph_callee ON callgraph(callee);
+            """)
     
-    def load(self) -> Optional[dict]:
-        if not self.metadata_file.exists():
-            return None
-        
-        with open(self.metadata_file) as f:
-            data = json.load(f)
-        
-        class Metadata:
-            def __init__(self, data):
-                self.__dict__.update(data)
-        
-        return Metadata(data)
+    def save_chunks(self, chunks: List[Dict[str, Any]]):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.executemany(
+                """INSERT OR REPLACE INTO chunks 
+                   (id, name, file_path, start_line, end_line, chunk_type, subsys, code_snippet)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                [(c["id"], c["name"], c["file_path"], c["start_line"], 
+                  c["end_line"], c.get("chunk_type"), c.get("subsys"), 
+                  c.get("code_snippet", "")) for c in chunks]
+            )
     
-    def is_fresh(self, commit: str) -> bool:
-        meta = self.load()
-        if not meta:
-            return False
-        return getattr(meta, "base_commit", None) == commit or getattr(meta, "target", None) == commit
+    def get_chunks(self, ids: List[str]) -> List[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            placeholders = ",".join("?" * len(ids))
+            rows = conn.execute(
+                f"SELECT * FROM chunks WHERE id IN ({placeholders})", ids
+            ).fetchall()
+            return [dict(row) for row in rows]
     
-    def has_delta(self, delta_name: str) -> bool:
-        # Check metadata deltas list first
-        meta = self.load()
-        if meta:
-            deltas = getattr(meta, "deltas", [])
-            if delta_name in deltas:
-                return True
-        
-        # Check filesystem
-        delta_dir = self.path.parent / delta_name
-        return delta_dir.exists()
+    def search_chunks_by_subsys(self, subsys: str, limit: int = 100) -> List[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM chunks WHERE subsys = ? LIMIT ?",
+                (subsys, limit)
+            ).fetchall()
+            return [dict(row) for row in rows]
     
-    def check_consistency(self) -> bool:
-        meta = self.load()
-        if not meta:
-            return False
-        return getattr(meta, "base_commit", None) is not None or getattr(meta, "target", None) is not None
+    def save_metadata(self, metadata: Dict[str, Any]):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS index_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            for key, value in metadata.items():
+                conn.execute(
+                    "INSERT OR REPLACE INTO index_metadata (key, value) VALUES (?, ?)",
+                    (key, str(value))
+                )
     
-    def list_deltas(self) -> List[str]:
-        version_dir = self.path.parent
-        deltas = []
-        if version_dir.exists():
-            for item in version_dir.iterdir():
-                if item.is_dir() and item.name.startswith("delta-"):
-                    deltas.append(item.name)
-        return sorted(deltas)
-    
-    def get_current_version(self) -> str:
-        current_link = self.path.parent / "current"
-        if current_link.exists() and current_link.is_symlink():
-            return str(current_link.resolve().name)
-        return "base"
-    
-    def set_current_version(self, version: str):
-        current_link = self.path.parent / "current"
-        target = self.path.parent / version
-        
-        if current_link.exists() or current_link.is_symlink():
-            current_link.unlink()
-        
-        current_link.symlink_to(target, target_is_directory=True)
+    def get_metadata(self, key: str) -> Optional[str]:
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT value FROM index_metadata WHERE key = ?", (key,)
+            ).fetchone()
+            return row[0] if row else None

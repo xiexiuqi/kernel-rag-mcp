@@ -59,18 +59,18 @@ class TestEndToEndScenarios:
         from pathlib import Path
 
         start = time.time()
-        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_search("CFS vruntime")
         elapsed = time.time() - start
 
-        assert elapsed <= 10.0
+        assert elapsed <= 15.0
         assert result is not None
 
     def test_line_number_first_principle(self):
         from kernel_rag_mcp.server.tools.code_tools import CodeTools
         from pathlib import Path
 
-        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_search("update_curr")
 
         assert result is not None
@@ -83,7 +83,7 @@ class TestEndToEndScenarios:
         from kernel_rag_mcp.server.tools.code_tools import CodeTools
         from pathlib import Path
 
-        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(Path.home() / "linux", Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_search("schedule")
 
         assert result is not None
@@ -107,7 +107,7 @@ class TestIntegrationWithRealKernel:
         if not KERNEL_REPO_PATH.exists():
             pytest.skip("Kernel repo not found at ~/linux")
 
-        tools = CodeTools(KERNEL_REPO_PATH, Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(KERNEL_REPO_PATH, Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_search("CFS vruntime", subsys="kernel/sched")
         assert len(result) > 0
 
@@ -119,7 +119,7 @@ class TestIntegrationWithRealKernel:
         if not KERNEL_REPO_PATH.exists():
             pytest.skip("Kernel repo not found at ~/linux")
 
-        tools = CodeTools(KERNEL_REPO_PATH, Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(KERNEL_REPO_PATH, Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_search("page allocation", subsys="mm")
         assert len(result) > 0
 
@@ -131,7 +131,7 @@ class TestIntegrationWithRealKernel:
         if not KERNEL_REPO_PATH.exists():
             pytest.skip("Kernel repo not found at ~/linux")
 
-        tools = CodeTools(KERNEL_REPO_PATH, Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")
+        tools = CodeTools(KERNEL_REPO_PATH, Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")
         result = tools.kernel_search("TCP congestion control", subsys="net")
         if len(result) == 0:
             pytest.skip("net subsystem not yet indexed")

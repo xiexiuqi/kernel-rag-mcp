@@ -17,7 +17,7 @@ router = IntentRouter()
 
 # Get repo path from environment or default
 REPO_PATH = Path(os.environ.get("KERNEL_REPO", str(Path.home() / "linux")))
-INDEX_PATH = Path(os.environ.get("INDEX_PATH", str(Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0-rc6")))
+INDEX_PATH = Path(os.environ.get("INDEX_PATH", str(Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")))
 
 # Initialize tools
 code_tools = CodeTools(REPO_PATH, INDEX_PATH)
