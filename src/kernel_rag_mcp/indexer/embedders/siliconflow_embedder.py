@@ -5,12 +5,13 @@ from typing import List, Optional
 class SiliconFlowEmbedder:
     def __init__(self, api_key: Optional[str] = None, model: str = "BAAI/bge-m3"):
         self.api_key = api_key or os.environ.get("SILICONFLOW_API_KEY")
+        if not self.api_key:
+            from ...config import get_config
+            cfg = get_config()
+            self.api_key = cfg.siliconflow_api_key
         self.model = model
         self.dim = 1024
         self.base_url = "https://api.siliconflow.cn/v1"
-        
-        if not self.api_key:
-            raise ValueError("SiliconFlow API key required. Set SILICONFLOW_API_KEY env var or pass api_key parameter.")
     
     def encode(self, texts: List[str]) -> List[List[float]]:
         import requests

@@ -1,26 +1,58 @@
+import json
 from pathlib import Path
 from typing import Optional
 import os
 
 
 class Config:
+    CONFIG_DIR = Path.home() / ".kernel-rag"
+    CONFIG_FILE = CONFIG_DIR / "config.json"
+
     def __init__(self):
-        self.kernel_repo = Path(os.environ.get("KERNEL_REPO", Path.home() / "linux"))
-        self.index_root = Path(os.environ.get(
-            "INDEX_PATH",
-            Path.home() / ".kernel-rag" / "repos" / "linux"
-        ))
-        self.embedding_model = os.environ.get("EMBEDDING_MODEL", "jina-code-0.5b")
-        self.embedding_dim = int(os.environ.get("EMBEDDING_DIM", "896"))
-        self.model_path = os.environ.get("MODEL_PATH")
-        self.vector_backend = os.environ.get("VECTOR_BACKEND", "qdrant")
-        self.batch_size = int(os.environ.get("BATCH_SIZE", "50"))
+        self._file_config = self._load_file()
+
+        self.kernel_repo = Path(self._get("kernel_repo", Path.home() / "linux"))
+        self.index_root = Path(self._get("index_root", Path.home() / ".kernel-rag" / "repos" / "linux"))
+        self.embedding_model = self._get("embedding_model", "jina-code-0.5b")
+        self.embedding_dim = int(self._get("embedding_dim", "896"))
+        self.model_path = self._get("model_path")
+        self.vector_backend = self._get("vector_backend", "qdrant")
+        self.batch_size = int(self._get("batch_size", "50"))
+        self.siliconflow_api_key = self._get("siliconflow_api_key")
+
+    def _load_file(self) -> dict:
+        if self.CONFIG_FILE.exists():
+            with open(self.CONFIG_FILE, "r") as f:
+                return json.load(f)
+        return {}
+
+    def _get(self, key: str, default=None):
+        env_key = key.upper()
+        if env_key in os.environ:
+            return os.environ[env_key]
+        return self._file_config.get(key, default)
+
+    def save(self):
+        self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        data = {
+            "kernel_repo": str(self.kernel_repo),
+            "index_root": str(self.index_root),
+            "embedding_model": self.embedding_model,
+            "embedding_dim": self.embedding_dim,
+            "model_path": self.model_path,
+            "vector_backend": self.vector_backend,
+            "batch_size": self.batch_size,
+        }
+        if self.siliconflow_api_key:
+            data["siliconflow_api_key"] = self.siliconflow_api_key
+        with open(self.CONFIG_FILE, "w") as f:
+            json.dump(data, f, indent=2)
 
     def index_dir(self, version: str) -> Path:
-        return self.index_root / version / "base"
+        return Path(self.index_root) / version / "base"
 
     def delta_dir(self, version: str, delta_name: str) -> Path:
-        return self.index_root / version / f"delta-{delta_name}"
+        return Path(self.index_root) / version / f"delta-{delta_name}"
 
     def get_version_ns(self, target: str) -> str:
         if target.startswith("v"):

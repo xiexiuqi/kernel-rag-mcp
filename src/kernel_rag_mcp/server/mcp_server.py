@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -13,14 +12,17 @@ from .tools.causal_tools import CausalTools
 from ..retriever.hybrid_search import HybridSearcher
 from ..indexer.performance_indexer import PerformanceIndexer
 from ..storage.graph_store import GraphStore
+from ..storage.metadata_store import MetadataStore
+from ..config import get_config
 
 
 mcp = FastMCP("kernel-rag")
 router = IntentRouter()
 
-# Get repo path from environment or default
-REPO_PATH = Path(os.environ.get("KERNEL_REPO", str(Path.home() / "linux")))
-INDEX_PATH = Path(os.environ.get("INDEX_PATH", str(Path.home() / ".kernel-rag" / "repos" / "linux" / "v7.0")))
+# Load configuration from ~/.kernel-rag/config.json
+_cfg = get_config()
+REPO_PATH = _cfg.kernel_repo
+INDEX_PATH = _cfg.index_dir("v7.0")
 
 # Initialize tools
 code_tools = CodeTools(REPO_PATH, INDEX_PATH)
@@ -28,7 +30,6 @@ git_tools = GitTools(REPO_PATH, INDEX_PATH)
 kconfig_tools = KconfigTools(REPO_PATH)
 performance_indexer = PerformanceIndexer()
 
-from ..storage.metadata_store import MetadataStore
 _metadata_store = None
 _base_path = INDEX_PATH / "base"
 if _base_path.exists():
