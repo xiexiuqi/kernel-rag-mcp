@@ -153,3 +153,11 @@ class VectorStore:
 
         if id in self._data:
             self._data[id]["metadata"].update(metadata)
+
+    def close(self):
+        if self._qdrant_client:
+            self._qdrant_client.close()
+            self._qdrant_client = None
+
+    def __del__(self):
+        self.close()

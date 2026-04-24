@@ -23,20 +23,21 @@ class LineValidationResult:
 
 class HybridSearcher:
     def __init__(self, index_path: Optional[Path] = None, repo_path: Optional[Path] = None):
-        self.index_path = Path(index_path) if index_path else None
+        raw_path = Path(index_path) if index_path else None
+        self.index_path = self._resolve_index_path(raw_path)
         self.repo_path = repo_path
         
         if self.index_path:
             if repo_path is None:
-                meta_file = self.index_path / "base" / "metadata.json"
+                meta_file = self.index_path / "metadata.json"
                 if meta_file.exists():
                     with open(meta_file) as f:
                         meta = json.load(f)
                     self.repo_path = Path(meta.get("repo_path", "."))
             
-            self.vector_store = VectorStore(backend="qdrant", path=self.index_path / "base" / "qdrant")
+            self.vector_store = VectorStore(backend="qdrant", path=self.index_path / "qdrant")
             self.vector_store.create_collection("code_chunks", self._load_dim())
-            self.sparse_store = SparseStore(path=self.index_path / "base" / "sparse")
+            self.sparse_store = SparseStore(path=self.index_path / "sparse")
             self.chunks = self._load_chunks()
             self._build_sparse_index()
         else:
@@ -45,11 +46,29 @@ class HybridSearcher:
             self.chunks = []
         
         self.embedder = self._load_embedder()
+
+    def _resolve_index_path(self, raw_path: Optional[Path]) -> Optional[Path]:
+        if not raw_path:
+            return None
+        nested_base = raw_path / "base"
+        has_nested_contents = (
+            (nested_base / "qdrant").exists()
+            or (nested_base / "metadata.db").exists()
+        )
+        if has_nested_contents:
+            return nested_base
+        has_base_contents = (
+            (raw_path / "qdrant").exists()
+            or (raw_path / "metadata.db").exists()
+        )
+        if has_base_contents:
+            return raw_path
+        return raw_path
     
     def _load_embedder(self):
         if self.index_path:
             from ..storage.metadata_store import MetadataStore
-            store = MetadataStore(self.index_path / "base")
+            store = MetadataStore(self.index_path)
             model = store.get_metadata("embedding_model")
             dim = store.get_metadata("embedding_dim")
             if model and dim:
@@ -62,7 +81,7 @@ class HybridSearcher:
     def _load_dim(self):
         if self.index_path:
             from ..storage.metadata_store import MetadataStore
-            store = MetadataStore(self.index_path / "base")
+            store = MetadataStore(self.index_path)
             dim = store.get_metadata("embedding_dim")
             if dim:
                 return int(dim)
@@ -73,7 +92,7 @@ class HybridSearcher:
             return []
         
         from ..storage.metadata_store import MetadataStore
-        store = MetadataStore(self.index_path / "base")
+        store = MetadataStore(self.index_path)
         rows = store.search_chunks_by_subsys("", limit=1000000)
         
         chunks = []
@@ -161,7 +180,7 @@ class HybridSearcher:
             chunk_id = r.id
             chunk = self._find_chunk(chunk_id)
             
-            if chunk and (not subsys or chunk.subsys == subsys):
+            if chunk and (not subsys or self._subsys_match(chunk.subsys, subsys)):
                 code = self._read_code(chunk)
                 results.append(SearchResult(chunk, r.score, code))
         
@@ -201,6 +220,15 @@ class HybridSearcher:
             if c.name == chunk_id:
                 return c
         return None
+
+    def _subsys_match(self, chunk_subsys: str, filter_subsys: str) -> bool:
+        if not chunk_subsys or not filter_subsys:
+            return False
+        return (
+            chunk_subsys == filter_subsys
+            or chunk_subsys.endswith(f"/{filter_subsys}")
+            or filter_subsys.endswith(f"/{chunk_subsys}")
+        )
 
     def validate_line_number(self, result: SearchResult) -> LineValidationResult:
         if not self.repo_path or not result.chunk:

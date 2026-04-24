@@ -56,7 +56,6 @@ def main():
             proc.stdin.close()
 
     def forward_server_to_client():
-        """Read newline-delimited from server, send Content-Length to stdout."""
         try:
             while True:
                 line = proc.stdout.readline()
@@ -65,11 +64,10 @@ def main():
                 line = line.strip()
                 if not line:
                     continue
-                # Send Content-Length format to client
                 body = line.encode("utf-8")
-                sys.stdout.write(f"Content-Length: {len(body)}\r\n\r\n")
-                sys.stdout.write(line + "\n")
-                sys.stdout.flush()
+                header = f"Content-Length: {len(body)}\r\n\r\n".encode("utf-8")
+                sys.stdout.buffer.write(header + body)
+                sys.stdout.buffer.flush()
         except Exception:
             pass
 
