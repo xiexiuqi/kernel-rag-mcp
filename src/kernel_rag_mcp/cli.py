@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 import click
 
@@ -198,9 +199,14 @@ def mcp_install(client, repo):
     """Install MCP configuration for AI client."""
     
     index_path = DEFAULT_INDEX_ROOT / "repos" / repo / "v7.0"
+    repo_path = Path.home() / "linux"
+    src_path = Path(__file__).parent.parent.parent
+    python_exe = os.environ.get("PYTHON", sys.executable)
+
     env = {
-        "KERNEL_REPO": str(Path.home() / "linux"),
+        "KERNEL_REPO": str(repo_path),
         "INDEX_PATH": str(index_path),
+        "PYTHONPATH": f"{src_path}",
     }
 
     api_key = os.environ.get("SILICONFLOW_API_KEY")
@@ -210,7 +216,7 @@ def mcp_install(client, repo):
     config = {
         "mcpServers": {
             "kernel-rag": {
-                "command": "python",
+                "command": python_exe,
                 "args": ["-m", "kernel_rag_mcp.server.mcp_server"],
                 "env": env
             }
