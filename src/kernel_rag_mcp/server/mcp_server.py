@@ -8,8 +8,11 @@ from .router import IntentRouter
 from .tools.code_tools import CodeTools
 from .tools.git_tools import GitTools
 from .tools.kconfig_tools import KconfigTools
+from .tools.type_tools import TypeTools
+from .tools.causal_tools import CausalTools
 from ..retriever.hybrid_search import HybridSearcher
 from ..indexer.performance_indexer import PerformanceIndexer
+from ..storage.graph_store import GraphStore
 
 
 mcp = FastMCP("kernel-rag")
@@ -24,6 +27,18 @@ code_tools = CodeTools(REPO_PATH, INDEX_PATH)
 git_tools = GitTools(REPO_PATH, INDEX_PATH)
 kconfig_tools = KconfigTools(REPO_PATH)
 performance_indexer = PerformanceIndexer()
+
+from ..storage.metadata_store import MetadataStore
+_metadata_store = None
+_base_path = INDEX_PATH / "base"
+if _base_path.exists():
+    _metadata_store = MetadataStore(_base_path)
+    type_tools = TypeTools(_metadata_store)
+else:
+    type_tools = None
+
+_graph_store = GraphStore(backend="networkx", path=INDEX_PATH)
+causal_tools = CausalTools(_graph_store)
 
 
 @mcp.tool()
@@ -190,6 +205,60 @@ def kconfig_impact(config_name: str, repo: str = "linux") -> str:
         return output
     
     return f"No files found referencing {config_name}"
+
+
+@mcp.tool()
+def git_search_by_type(type_tags: str, subsys: str = None, since: str = None, until: str = None, repo: str = "linux") -> str:
+    """Search commits by patch type tags. Pass type_tags as comma-separated string like 'performance,bugfix'."""
+    if type_tools is None:
+        return "Type tools not available (no index found)"
+    
+    tags = [t.strip() for t in type_tags.split(",")]
+    results = type_tools.git_search_by_type(tags, subsys=subsys, since=since, until=until)
+    
+    if not results:
+        return f"No commits found with tags '{type_tags}'"
+    
+    output = f"Commits with tags '{type_tags}':\n"
+    for r in results[:10]:
+        output += f"  {r['hash'][:8]}: {r['title']} ({r.get('type_tags', '')})\n"
+    
+    return output
+
+
+@mcp.tool()
+def git_type_stats(subsys: str = None, since: str = None, until: str = None, repo: str = "linux") -> str:
+    """Show patch type distribution statistics."""
+    if type_tools is None:
+        return "Type tools not available (no index found)"
+    
+    stats = type_tools.git_type_stats(subsys=subsys, since=since, until=until)
+    
+    output = f"Patch type statistics:\n"
+    output += f"Total commits: {stats.get('total', 0)}\n"
+    for tag, count in sorted(stats.items()):
+        if tag != "total":
+            output += f"  {tag}: {count}\n"
+    
+    return output
+
+
+@mcp.tool()
+def git_causal_chain(commit_hash: str, direction: str = "upstream", repo: str = "linux") -> str:
+    """Query the causal chain of a commit (upstream=bug origin, downstream=fixes)."""
+    return causal_tools.git_causal_chain(commit_hash, direction=direction)
+
+
+@mcp.tool()
+def git_bug_origin(commit_hash: str, repo: str = "linux") -> str:
+    """Find the root commit that introduced a bug."""
+    return causal_tools.git_bug_origin(commit_hash)
+
+
+@mcp.tool()
+def git_backport_status(commit_hash: str, repo: str = "linux") -> str:
+    """Check backport status of a commit."""
+    return causal_tools.git_backport_status(commit_hash)
 
 
 @mcp.tool()
