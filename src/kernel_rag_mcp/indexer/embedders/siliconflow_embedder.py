@@ -10,13 +10,15 @@ class SiliconFlowEmbedder:
         self.base_url = "https://api.siliconflow.cn/v1"
         
         if not self.api_key:
-            raise ValueError("SiliconFlow API key required. Set SILICONFLOW_API_KEY env var.")
+            raise ValueError("SiliconFlow API key required. Set SILICONFLOW_API_KEY env var or pass api_key parameter.")
     
     def encode(self, texts: List[str]) -> List[List[float]]:
         import requests
         
         if isinstance(texts, str):
             texts = [texts]
+        
+
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",

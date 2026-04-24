@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Batch indexing script for kernel-rag-mcp using SiliconFlow API."""
+import os
 import sys
 import time
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -13,7 +15,21 @@ from kernel_rag_mcp.storage.metadata_store import MetadataStore
 from kernel_rag_mcp.config import Config
 
 
+def print_progress(current, total, prefix="Progress", suffix=""):
+    bar_length = 40
+    filled = int(bar_length * current / total)
+    bar = "█" * filled + "░" * (bar_length - filled)
+    percent = 100 * current / total
+    print(f"\r{prefix}: [{bar}] {percent:.1f}% ({current}/{total}) {suffix}", end="", flush=True)
+
+
 def main():
+    api_key = os.environ.get("SILICONFLOW_API_KEY")
+    if not api_key:
+        print("ERROR: SILICONFLOW_API_KEY environment variable not set")
+        print("Set it with: export SILICONFLOW_API_KEY=your_key_here")
+        sys.exit(1)
+    
     config = Config()
     config.embedding_model = "siliconflow-bge-m3"
     config.embedding_dim = 1024
@@ -24,17 +40,19 @@ def main():
     
     index_dir = index_root / version / "base"
     index_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_file = index_dir / "checkpoint.json"
     
     print(f"Indexing {repo_path} -> {index_dir}")
     
     code_indexer = CodeIndexer()
-    embedder = SiliconFlowEmbedder()
+    embedder = SiliconFlowEmbedder(api_key=api_key)
     vector_store = VectorStore(backend="qdrant", path=index_dir / "qdrant")
     metadata_store = MetadataStore(index_dir)
     
-    subsystems = ["kernel/sched"]
+    subsystems = ["kernel/sched", "mm", "net"]
     all_chunks = []
     
+    print("\nPhase 1: Parsing source files...")
     for subsys in subsystems:
         subsys_path = repo_path / subsys
         if not subsys_path.exists():
@@ -45,25 +63,43 @@ def main():
             for chunk in result.chunks:
                 chunk.set_subsystem(subsys)
             all_chunks.extend(result.chunks)
+        print(f"  {subsys}: {len(result.chunks)} chunks")
     
-    print(f"Total chunks: {len(all_chunks)}")
+    print(f"\nTotal chunks to index: {len(all_chunks)}")
     
     vector_store.create_collection("code_chunks", embedder.dim)
     
     batch_size = 10
     total = len(all_chunks)
     
-    for i in range(0, total, batch_size):
+    start_idx = 0
+    if checkpoint_file.exists():
+        with open(checkpoint_file) as f:
+            checkpoint = json.load(f)
+            start_idx = checkpoint.get("last_processed", 0)
+        print(f"Resuming from checkpoint: {start_idx}/{total}")
+    
+    print(f"\nPhase 2: Embedding and indexing (starting from {start_idx})...")
+    total_start = time.time()
+    
+    for i in range(start_idx, total, batch_size):
         batch_end = min(i + batch_size, total)
         batch_chunks = all_chunks[i:batch_end]
         
         texts = [f"{c.name} {c.code[:200]}" for c in batch_chunks]
         
-        print(f"Embedding batch {i}-{batch_end}...", flush=True)
-        start = time.time()
-        embeddings = embedder.encode(texts)
-        elapsed = time.time() - start
-        print(f"  Done in {elapsed:.1f}s ({elapsed/len(texts):.1f}s per chunk)", flush=True)
+        batch_start = time.time()
+        try:
+            embeddings = embedder.encode(texts)
+        except Exception as e:
+            print(f"\nError embedding batch {i}-{batch_end}: {e}")
+            print("Saving checkpoint and retrying in 5s...")
+            with open(checkpoint_file, "w") as f:
+                json.dump({"last_processed": i, "total": total}, f)
+            time.sleep(5)
+            embeddings = embedder.encode(texts)
+        
+        batch_elapsed = time.time() - batch_start
         
         vector_chunks = []
         sqlite_chunks = []
@@ -98,7 +134,15 @@ def main():
         vector_store.insert(vector_chunks)
         metadata_store.save_chunks(sqlite_chunks)
         
-        print(f"  Indexed {batch_end}/{total} ({100*batch_end//total}%)", flush=True)
+        with open(checkpoint_file, "w") as f:
+            json.dump({"last_processed": batch_end, "total": total}, f)
+        
+        eta = (total - batch_end) * (time.time() - total_start) / (batch_end - start_idx + 1) if batch_end > start_idx else 0
+        print_progress(batch_end, total, "Indexing", f"ETA: {eta/60:.1f}min")
+    
+    total_elapsed = time.time() - total_start
+    print(f"\n\nIndexing complete: {total - start_idx} chunks in {total_elapsed/60:.1f} minutes")
+    print(f"Average: {total_elapsed/(total - start_idx):.2f}s per chunk")
     
     metadata_store.save_metadata({
         "repo_path": str(repo_path),
@@ -108,10 +152,11 @@ def main():
         "embedding_dim": embedder.dim,
     })
     
+    if checkpoint_file.exists():
+        checkpoint_file.unlink()
+    
     if vector_store._qdrant_client:
         vector_store._qdrant_client.close()
-    
-    print(f"Indexing complete: {total} chunks")
 
 
 if __name__ == "__main__":

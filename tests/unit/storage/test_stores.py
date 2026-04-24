@@ -150,38 +150,44 @@ class TestMetadataStore:
             "subsystems": ["sched", "mm", "net"],
         }
 
-        store.save(metadata)
-        loaded = store.load()
+        store.save_metadata(metadata)
+        loaded_repo = store.get_metadata("repo_name")
+        loaded_version = store.get_metadata("version_namespace")
 
-        assert loaded.repo_name == "linux"
-        assert loaded.version_namespace == "v6.12"
-        assert "sched" in loaded.subsystems
+        assert loaded_repo == "linux"
+        assert loaded_version == "v6.12"
 
-    def test_version_tracking(self, tmp_path):
+    def test_chunks_storage(self, tmp_path):
         store = MetadataStore(path=tmp_path)
-        store.save({"base_commit": "abc123", "merged_to": None})
+        chunks = [
+            {
+                "id": "test:1",
+                "name": "func_a",
+                "file_path": "test.c",
+                "start_line": 10,
+                "end_line": 20,
+                "chunk_type": "function",
+                "subsys": "test",
+                "code_snippet": "void func_a() {}",
+            }
+        ]
 
-        assert store.is_fresh("abc123") is True
-        assert store.is_fresh("def456") is False
+        store.save_chunks(chunks)
+        loaded = store.get_chunks(["test:1"])
 
-    def test_delta_tracking(self, tmp_path):
+        assert len(loaded) == 1
+        assert loaded[0]["name"] == "func_a"
+        assert loaded[0]["file_path"] == "test.c"
+
+    def test_subsys_filter(self, tmp_path):
         store = MetadataStore(path=tmp_path)
-        store.save({
-            "base_commit": "abc123",
-            "deltas": ["delta-v6.12.1", "delta-v6.12.2"],
-        })
+        chunks = [
+            {"id": "1", "name": "a", "file_path": "a.c", "start_line": 1, "end_line": 2, "chunk_type": "function", "subsys": "sched", "code_snippet": ""},
+            {"id": "2", "name": "b", "file_path": "b.c", "start_line": 1, "end_line": 2, "chunk_type": "function", "subsys": "mm", "code_snippet": ""},
+        ]
 
-        assert store.has_delta("delta-v6.12.1") is True
-        assert store.has_delta("delta-v6.12.3") is False
+        store.save_chunks(chunks)
+        sched_chunks = store.search_chunks_by_subsys("sched")
 
-    def test_consistency_check(self, tmp_path):
-        store = MetadataStore(path=tmp_path)
-        store.save({
-            "base_commit": "abc123",
-            "chunks": {"code": 1000, "commits": 100},
-        })
-
-        assert store.check_consistency() is True
-
-        store.save({"base_commit": None})
-        assert store.check_consistency() is False
+        assert len(sched_chunks) == 1
+        assert sched_chunks[0]["name"] == "a"

@@ -38,6 +38,7 @@ class HybridSearcher:
             self.vector_store.create_collection("code_chunks", self._load_dim())
             self.sparse_store = SparseStore(path=self.index_path / "base" / "sparse")
             self.chunks = self._load_chunks()
+            self._build_sparse_index()
         else:
             self.vector_store = VectorStore(backend="memory")
             self.sparse_store = SparseStore(backend="memory")
@@ -86,6 +87,17 @@ class HybridSearcher:
                 subsys=item.get("subsys"),
             ))
         return chunks
+    
+    def _build_sparse_index(self):
+        docs = []
+        for chunk in self.chunks:
+            docs.append({
+                "id": f"{chunk.file_path}:{chunk.name}",
+                "symbol": chunk.name,
+                "file": chunk.file_path,
+                "subsys": chunk.subsys,
+            })
+        self.sparse_store.index(docs)
     
     def _read_code(self, chunk: CodeChunk) -> str:
         if not self.repo_path:
