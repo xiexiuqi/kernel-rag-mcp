@@ -14,6 +14,7 @@ from ..indexer.performance_indexer import PerformanceIndexer
 from ..storage.graph_store import GraphStore
 from ..storage.metadata_store import MetadataStore
 from ..config import get_config
+from .stdio_compat import stdio_server_compat
 
 
 mcp = FastMCP("kernel-rag")
@@ -301,4 +302,14 @@ def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    import anyio
+
+    async def main():
+        async with stdio_server_compat() as (read_stream, write_stream):
+            await mcp._mcp_server.run(
+                read_stream,
+                write_stream,
+                mcp._mcp_server.create_initialization_options(),
+            )
+
+    anyio.run(main)
