@@ -23,7 +23,7 @@ class MetadataStore:
                     subsys TEXT,
                     code_snippet TEXT
                 );
-                
+
                 CREATE TABLE IF NOT EXISTS symbols (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
@@ -32,16 +32,19 @@ class MetadataStore:
                     symbol_type TEXT,
                     UNIQUE(name, file_path, line)
                 );
-                
+
                 CREATE TABLE IF NOT EXISTS git_commits (
                     hash TEXT PRIMARY KEY,
                     title TEXT,
                     author TEXT,
                     date TEXT,
                     message TEXT,
-                    diff TEXT
+                    diff TEXT,
+                    vector_id TEXT,
+                    type_tags TEXT,
+                    labels TEXT
                 );
-                
+
                 CREATE TABLE IF NOT EXISTS callgraph (
                     caller TEXT NOT NULL,
                     callee TEXT NOT NULL,
@@ -62,6 +65,16 @@ class MetadataStore:
                 CREATE INDEX IF NOT EXISTS idx_callgraph_caller ON callgraph(caller);
                 CREATE INDEX IF NOT EXISTS idx_callgraph_callee ON callgraph(callee);
             """)
+            self._migrate_git_commits(conn)
+
+    def _migrate_git_commits(self, conn: sqlite3.Connection):
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(git_commits)")]
+        if "vector_id" not in columns:
+            conn.execute("ALTER TABLE git_commits ADD COLUMN vector_id TEXT")
+        if "type_tags" not in columns:
+            conn.execute("ALTER TABLE git_commits ADD COLUMN type_tags TEXT")
+        if "labels" not in columns:
+            conn.execute("ALTER TABLE git_commits ADD COLUMN labels TEXT")
     
     def save_chunks(self, chunks: List[Dict[str, Any]]):
         with sqlite3.connect(self.db_path) as conn:
@@ -151,10 +164,11 @@ class MetadataStore:
         with sqlite3.connect(self.db_path) as conn:
             conn.executemany(
                 """INSERT OR REPLACE INTO git_commits
-                   (hash, title, author, date, message)
-                   VALUES (?, ?, ?, ?, ?)""",
+                   (hash, title, author, date, message, diff, vector_id, type_tags, labels)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [(c["hash"], c.get("title", ""), c.get("author", ""),
-                  c.get("date", ""), c.get("message", ""))
+                  c.get("date", ""), c.get("message", ""), c.get("diff", ""),
+                  c.get("vector_id", ""), c.get("type_tags", ""), c.get("labels", ""))
                  for c in commits]
             )
 
@@ -176,4 +190,22 @@ class MetadataStore:
                     "SELECT * FROM git_commits LIMIT ?",
                     (limit,)
                 ).fetchall()
+            return [dict(row) for row in rows]
+
+    def search_git_commits_by_type(self, type_tag: str, limit: int = 100) -> List[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM git_commits WHERE type_tags LIKE ? LIMIT ?",
+                (f"%{type_tag}%", limit)
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def get_git_commits_by_hashes(self, hashes: List[str]) -> List[Dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            placeholders = ",".join("?" * len(hashes))
+            rows = conn.execute(
+                f"SELECT * FROM git_commits WHERE hash IN ({placeholders})", hashes
+            ).fetchall()
             return [dict(row) for row in rows]

@@ -178,3 +178,101 @@ class GitIndexer:
             metadata_store.save_git_commits(commits)
 
         return len(commits)
+
+    def _classify_commit(self, commit: CommitEntry) -> List[str]:
+        title = commit.title.lower()
+        tags = []
+
+        if any(kw in title for kw in ["fix", "bug", "repair", "correct"]):
+            tags.append("bugfix")
+        if any(kw in title for kw in ["optim", "speedup", "fast", "latency", "throughput", "scale"]):
+            tags.append("performance")
+        if any(kw in title for kw in ["refactor", "cleanup", "simplify", "remove", "rework"]):
+            tags.append("refactor")
+        if any(kw in title for kw in ["add", "support", "implement", "introduce", "new"]):
+            tags.append("feature")
+        if title.startswith("revert"):
+            tags.append("revert")
+        if "regression" in title:
+            tags.append("regression")
+            tags.append("bugfix")
+        if any(kw in title for kw in ["doc", "comment", "docs:"]):
+            tags.append("documentation")
+        if any(kw in title for kw in ["selftest", "test", "kselftest"]):
+            tags.append("test")
+        if "cve" in title:
+            tags.append("security")
+
+        return tags
+
+    def _extract_labels(self, body: str) -> dict:
+        import re
+        labels = {}
+
+        fixes_match = re.search(r'Fixes:\s*([a-f0-9]+)', body, re.IGNORECASE)
+        if fixes_match:
+            labels["Fixes"] = fixes_match.group(1)
+
+        for label in ["Reported-by", "Reviewed-by", "Tested-by", "Acked-by", "Suggested-by", "Co-developed-by", "Bisected-by"]:
+            matches = re.findall(rf'{re.escape(label)}:\s*(.+)', body)
+            if matches:
+                labels[label] = matches
+
+        stable_match = re.search(r'Cc:\s*stable@', body, re.IGNORECASE)
+        if stable_match:
+            labels["Cc-stable"] = True
+
+        return labels
+
+    def _commit_to_text(self, commit: CommitEntry) -> str:
+        parts = [commit.title]
+        if commit.body:
+            parts.append(commit.body)
+        return "\n".join(parts)
+
+    def index_commits_with_embedding(
+        self,
+        commits: List[CommitEntry],
+        metadata_store,
+        vector_store,
+        embedder
+    ):
+        if not commits:
+            return
+
+        texts = [self._commit_to_text(c) for c in commits]
+        embeddings = embedder.encode(texts)
+
+        metadata_commits = []
+        vector_chunks = []
+
+        for i, commit in enumerate(commits):
+            vector_id = f"commit:{commit.hash}"
+            type_tags = ",".join(self._classify_commit(commit))
+            labels = str(self._extract_labels(commit.body))
+
+            metadata_commits.append({
+                "hash": commit.hash,
+                "title": commit.title,
+                "author": commit.author,
+                "date": commit.date,
+                "message": commit.body,
+                "vector_id": vector_id,
+                "type_tags": type_tags,
+                "labels": labels,
+            })
+
+            vector_chunks.append({
+                "id": vector_id,
+                "vector": embeddings[i],
+                "metadata": {
+                    "hash": commit.hash,
+                    "title": commit.title,
+                    "author": commit.author,
+                    "date": commit.date,
+                    "type_tags": type_tags,
+                }
+            })
+
+        metadata_store.save_git_commits(metadata_commits)
+        vector_store.insert(vector_chunks)

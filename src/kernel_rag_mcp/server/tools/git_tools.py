@@ -37,18 +37,82 @@ class CommitContext:
 
 
 class GitTools:
-    def __init__(self, repo_path: Path):
+    def __init__(self, repo_path: Path, index_path: Optional[Path] = None):
         self.repo_path = repo_path
+        self.index_path = index_path
         self.indexer = GitIndexer(repo_path)
-    
-    def git_search_commits(self, query: str, since: Optional[str] = None, until: Optional[str] = None) -> List[CommitInfo]:
-        # Search git log for commits matching query
+        self._embedder = None
+        self._vector_store = None
+        self._metadata_store = None
+
+    def _init_semantic_search(self):
+        if self._embedder is not None:
+            return
+
+        if not self.index_path:
+            return
+
+        base_path = self.index_path / "base"
+        if not base_path.exists():
+            return
+
+        from ...storage.metadata_store import MetadataStore
+        from ...storage.vector_store import VectorStore
+        from ...indexer.embedders.siliconflow_embedder import SiliconFlowEmbedder
+
+        store = MetadataStore(base_path)
+        model = store.get_metadata("embedding_model")
+        dim = store.get_metadata("embedding_dim")
+
+        if model and dim:
+            if "siliconflow" in model or "bge-m3" in model:
+                self._embedder = SiliconFlowEmbedder()
+            else:
+                from ...indexer.embedders.code_embedder import CodeEmbedder
+                self._embedder = CodeEmbedder(model_name=model, dim=int(dim))
+
+        qdrant_path = base_path / "qdrant"
+        if qdrant_path.exists():
+            self._vector_store = VectorStore(backend="qdrant", path=qdrant_path)
+            self._vector_store.create_collection("git_commits", int(dim) if dim else 768)
+
+        self._metadata_store = MetadataStore(base_path)
+
+    def git_search_commits(self, query: str, since: Optional[str] = None, until: Optional[str] = None, top_k: int = 10) -> List[CommitInfo]:
+        self._init_semantic_search()
+
+        if self._embedder and self._vector_store and self._metadata_store:
+            try:
+                query_emb = self._embedder.encode([query])[0]
+                vector_results = self._vector_store.search(query_vector=query_emb, top_k=top_k)
+
+                if vector_results:
+                    hashes = []
+                    for r in vector_results:
+                        h = r.metadata.get("hash") if hasattr(r, "metadata") else None
+                        if h:
+                            hashes.append(h)
+
+                    if hashes:
+                        commits_data = self._metadata_store.get_git_commits_by_hashes(hashes)
+                        return [
+                            CommitInfo(
+                                hash=c["hash"],
+                                title=c.get("title", ""),
+                                author=c.get("author", ""),
+                                date=c.get("date", ""),
+                            )
+                            for c in commits_data
+                        ]
+            except Exception:
+                pass
+
         cmd = ["git", "-C", str(self.repo_path), "log", "--format=%H|%s|%an|%ad", "--date=short", "--grep", query]
         if since:
             cmd.extend(["--since", since])
         if until:
             cmd.extend(["--until", until])
-        
+
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             commits = []

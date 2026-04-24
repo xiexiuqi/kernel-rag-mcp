@@ -21,7 +21,7 @@ INDEX_PATH = Path(os.environ.get("INDEX_PATH", str(Path.home() / ".kernel-rag" /
 
 # Initialize tools
 code_tools = CodeTools(REPO_PATH, INDEX_PATH)
-git_tools = GitTools(REPO_PATH)
+git_tools = GitTools(REPO_PATH, INDEX_PATH)
 kconfig_tools = KconfigTools(REPO_PATH)
 performance_indexer = PerformanceIndexer()
 
