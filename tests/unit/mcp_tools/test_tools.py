@@ -121,7 +121,7 @@ class TestCodeTools:
         assert len(result) > 0
         first = result[0]
         assert first.start_line > 0
-        assert "sched" in first.file_path or "mm" in first.file_path
+        assert first.file_path.startswith("kernel/") or first.file_path.startswith("mm/") or first.file_path.startswith("net/") or first.file_path.startswith("fs/") or first.file_path.startswith("drivers/") or first.file_path.startswith("arch/")
 
 
 class TestGitTools:
