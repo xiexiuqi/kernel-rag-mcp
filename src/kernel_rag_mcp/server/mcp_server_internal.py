@@ -286,7 +286,7 @@ def cscope_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
     return kernel_callers(symbol, depth=depth, repo=repo)
 
 
-@mcp.tool()
+@mcp.tool(name="grep_code")
 def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
     """Search code using grep/ripgrep. NOTE: Use short code keywords (function names, variable names) for pattern, not full sentences."""
     import shutil, subprocess
