@@ -26,6 +26,9 @@ class HybridSearcher:
         raw_path = Path(index_path) if index_path else None
         self.index_path = self._resolve_index_path(raw_path)
         self.repo_path = repo_path
+        self._vector_store = None
+        self._sparse_store = None
+        self._chunks = None
         
         if self.index_path:
             if repo_path is None:
@@ -35,17 +38,29 @@ class HybridSearcher:
                         meta = json.load(f)
                     self.repo_path = Path(meta.get("repo_path", "."))
             
-            self.vector_store = VectorStore(backend="qdrant", path=self.index_path / "qdrant")
-            self.vector_store.create_collection("code_chunks", self._load_dim())
-            self.sparse_store = SparseStore(path=self.index_path / "sparse")
-            self.chunks = self._load_chunks()
+            self._sparse_store = SparseStore(path=self.index_path / "sparse")
+            self._chunks = self._load_chunks()
             self._build_sparse_index()
         else:
-            self.vector_store = VectorStore(backend="memory")
-            self.sparse_store = SparseStore(backend="memory")
-            self.chunks = []
+            self._sparse_store = SparseStore(backend="memory")
+            self._chunks = []
         
         self.embedder = self._load_embedder()
+    
+    @property
+    def vector_store(self):
+        if self._vector_store is None and self.index_path:
+            self._vector_store = VectorStore(backend="qdrant", path=self.index_path / "qdrant")
+            self._vector_store.create_collection("code_chunks", self._load_dim())
+        return self._vector_store
+    
+    @property
+    def sparse_store(self):
+        return self._sparse_store
+    
+    @property
+    def chunks(self):
+        return self._chunks
 
     def _resolve_index_path(self, raw_path: Optional[Path]) -> Optional[Path]:
         if not raw_path:

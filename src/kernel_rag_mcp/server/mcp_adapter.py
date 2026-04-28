@@ -9,6 +9,9 @@ import threading
 
 
 def main():
+    # Force unbuffered stdout for pipe mode
+    sys.stdout.reconfigure(line_buffering=True)
+    
     # Start the actual MCP server
     proc = subprocess.Popen(
         [sys.executable, "-m", "kernel_rag_mcp.server.mcp_server_internal"],
