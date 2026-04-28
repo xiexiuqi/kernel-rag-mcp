@@ -40,7 +40,21 @@ class CodeTools:
         self.searcher = HybridSearcher(index_path, repo_path)
         self.callgraph = CallGraphBuilder(repo_path)
     
+    SUBSYS_ALIASES = {
+        "network": "net",
+        "scheduling": "kernel/sched",
+        "scheduler": "kernel/sched",
+        "memory": "mm",
+    }
+
+    def _resolve_subsys(self, subsys: str) -> str:
+        if not subsys:
+            return subsys
+        subsys = subsys.lower().strip()
+        return self.SUBSYS_ALIASES.get(subsys, subsys)
+
     def kernel_search(self, query: str, subsys: str = None, top_k: int = 10) -> List[CodeChunk]:
+        subsys = self._resolve_subsys(subsys)
         results = self.searcher.search(query, subsys=subsys, top_k=top_k)
         chunks = []
         for r in results:

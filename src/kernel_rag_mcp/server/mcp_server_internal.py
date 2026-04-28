@@ -289,16 +289,29 @@ def cscope_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
 @mcp.tool()
 def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
     """Search code using grep/ripgrep."""
-    import subprocess
+    import shutil, subprocess
+
     try:
-        result = subprocess.run(
-            ["grep", "-r", "-n", "--include", path, pattern, str(REPO_PATH)],
-            capture_output=True, text=True, check=True
-        )
+        # Prefer ripgrep (faster)
+        if shutil.which("rg"):
+            result = subprocess.run(
+                ["rg", "-n", "-S", "--type", path.replace("*.", ""), "--max-count", "20", pattern, str(REPO_PATH)],
+                capture_output=True, text=True, timeout=10
+            )
+        else:
+            result = subprocess.run(
+                ["grep", "-r", "-n", "--include", path, "-m", "20", pattern, str(REPO_PATH)],
+                capture_output=True, text=True, timeout=10
+            )
+
+        if result.returncode != 0:
+            return f"No matches found for '{pattern}'"
         lines = result.stdout.strip().split("\n")[:20]
         return "\n".join(lines)
-    except subprocess.CalledProcessError:
-        return f"No matches found for '{pattern}'"
+    except subprocess.TimeoutExpired:
+        return f"Search timed out for '{pattern}'. Try a more specific keyword."
+    except Exception:
+        return f"Search error for '{pattern}'"
 
 
 if __name__ == "__main__":
