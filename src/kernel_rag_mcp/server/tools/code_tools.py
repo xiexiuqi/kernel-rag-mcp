@@ -42,6 +42,7 @@ class CodeTools:
     
     SUBSYS_ALIASES = {
         "network": "net",
+        "networking": "net",
         "scheduling": "kernel/sched",
         "scheduler": "kernel/sched",
         "memory": "mm",
@@ -56,6 +57,11 @@ class CodeTools:
     def kernel_search(self, query: str, subsys: str = None, top_k: int = 10) -> List[CodeChunk]:
         subsys = self._resolve_subsys(subsys)
         results = self.searcher.search(query, subsys=subsys, top_k=top_k)
+        
+        # Fallback: if subsys filter returns empty, search globally
+        if not results and subsys:
+            results = self.searcher.search(query, subsys=None, top_k=top_k)
+        
         chunks = []
         for r in results:
             chunks.append(CodeChunk(

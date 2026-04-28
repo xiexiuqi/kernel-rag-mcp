@@ -288,7 +288,7 @@ def cscope_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
 
 @mcp.tool()
 def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
-    """Search code using grep/ripgrep."""
+    """Search code using grep/ripgrep. NOTE: Use short code keywords (function names, variable names) for pattern, not full sentences."""
     import shutil, subprocess
 
     try:
@@ -305,6 +305,27 @@ def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
             )
 
         if result.returncode != 0:
+            # Try extracting keywords from long natural language queries
+            if len(pattern.split()) > 2:
+                keywords = [w for w in pattern.split() if len(w) > 3 and w.lower() not in ("what", "how", "does", "this", "that", "with", "from", "into", "about", "than")]
+                if keywords:
+                    fallback_pattern = keywords[0]
+                    try:
+                        if shutil.which("rg"):
+                            result2 = subprocess.run(
+                                ["rg", "-n", "-S", "--type", path.replace("*.", ""), "--max-count", "20", fallback_pattern, str(REPO_PATH)],
+                                capture_output=True, text=True, timeout=10
+                            )
+                        else:
+                            result2 = subprocess.run(
+                                ["grep", "-r", "-n", "--include", path, "-m", "20", fallback_pattern, str(REPO_PATH)],
+                                capture_output=True, text=True, timeout=10
+                            )
+                        if result2.returncode == 0:
+                            lines = result2.stdout.strip().split("\n")[:20]
+                            return f"No exact match for '{pattern}'. Showing results for keyword '{fallback_pattern}':\n" + "\n".join(lines)
+                    except Exception:
+                        pass
             return f"No matches found for '{pattern}'"
         lines = result.stdout.strip().split("\n")[:20]
         return "\n".join(lines)
