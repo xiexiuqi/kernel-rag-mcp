@@ -84,6 +84,7 @@ class Indexer:
             batch_chunks = all_chunks[i:batch_end]
 
             batch_embs = self.embedder.encode(batch)
+            print(f"  Batch {i//batch_size + 1}/{(len(texts) + batch_size - 1)//batch_size}: {i}-{batch_end} ({len(batch)} chunks)", flush=True)
 
             vector_chunks = []
             for j, chunk in enumerate(batch_chunks):
