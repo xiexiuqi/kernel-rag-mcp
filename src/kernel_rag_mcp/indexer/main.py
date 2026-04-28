@@ -83,7 +83,25 @@ class Indexer:
             batch = texts[i:batch_end]
             batch_chunks = all_chunks[i:batch_end]
 
-            batch_embs = self.embedder.encode(batch)
+            try:
+                batch_embs = self.embedder.encode(batch)
+            except Exception as e:
+                print(f"  ERROR: Failed to embed batch {i//batch_size + 1}: {e}")
+                print(f"  Saving checkpoint at {i} and continuing...")
+                checkpoint = {
+                    "next_idx": i,
+                    "total": len(all_chunks),
+                    "completed_ids": list(completed_ids),
+                    "base": base,
+                    "target": target,
+                    "subsystems": subsystems,
+                    "embedding_model": self.embedder.model_name,
+                    "embedding_dim": self.embedder.dim,
+                }
+                with open(checkpoint_file, "w") as f:
+                    json.dump(checkpoint, f)
+                continue
+
             print(f"  Batch {i//batch_size + 1}/{(len(texts) + batch_size - 1)//batch_size}: {i}-{batch_end} ({len(batch)} chunks)", flush=True)
 
             vector_chunks = []

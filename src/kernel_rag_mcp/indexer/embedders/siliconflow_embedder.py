@@ -14,13 +14,12 @@ class SiliconFlowEmbedder:
         self.dim = 1024
         self.base_url = "https://api.siliconflow.cn/v1"
     
-    def encode(self, texts: List[str]) -> List[List[float]]:
+    def encode(self, texts: List[str], max_retries: int = 3) -> List[List[float]]:
         import requests
+        import time
         
         if isinstance(texts, str):
             texts = [texts]
-        
-
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -33,15 +32,24 @@ class SiliconFlowEmbedder:
             "encoding_format": "float"
         }
         
-        response = requests.post(
-            f"{self.base_url}/embeddings",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
-        response.raise_for_status()
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    f"{self.base_url}/embeddings",
+                    headers=headers,
+                    json=payload,
+                    timeout=120
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                embeddings = [item["embedding"] for item in data["data"]]
+                return embeddings
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                last_error = e
+                wait_time = 2 ** attempt
+                print(f"  API timeout (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s...")
+                time.sleep(wait_time)
         
-        data = response.json()
-        embeddings = [item["embedding"] for item in data["data"]]
-        
-        return embeddings
+        raise last_error
