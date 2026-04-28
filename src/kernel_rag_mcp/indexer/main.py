@@ -164,7 +164,7 @@ class Indexer:
         for key, value in metadata.items():
             metadata_store.update_metadata(key, value)
 
-        self._save_chunks(index_dir, all_chunks)
+        self._save_chunks(index_dir, all_chunks, metadata_store)
 
         if checkpoint_file.exists():
             checkpoint_file.unlink()
@@ -177,7 +177,8 @@ class Indexer:
             return file_path[len(repo_str) + 1:]
         return file_path
 
-    def _save_chunks(self, index_dir: Path, chunks: List[CodeChunk]):
+    def _save_chunks(self, index_dir: Path, chunks: List[CodeChunk], metadata_store=None):
+        # Save to JSON file
         chunks_file = index_dir / "chunks.json"
         chunks_data = []
         for chunk in chunks:
@@ -191,3 +192,21 @@ class Indexer:
             })
         with open(chunks_file, "w") as f:
             json.dump(chunks_data, f, indent=2)
+        
+        # Save to SQLite metadata store
+        if metadata_store:
+            sqlite_chunks = []
+            for chunk in chunks:
+                rel_path = self._rel_path(chunk.file_path)
+                chunk_id = f"{rel_path}:{chunk.name}"
+                sqlite_chunks.append({
+                    "id": chunk_id,
+                    "name": chunk.name,
+                    "file_path": rel_path,
+                    "start_line": chunk.start_line,
+                    "end_line": chunk.end_line,
+                    "chunk_type": chunk.chunk_type,
+                    "subsys": chunk.subsys,
+                    "code_snippet": chunk.code[:200] if hasattr(chunk, 'code') else "",
+                })
+            metadata_store.save_chunks(sqlite_chunks)
