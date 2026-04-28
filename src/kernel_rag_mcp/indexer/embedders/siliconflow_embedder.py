@@ -10,6 +10,7 @@ class SiliconFlowEmbedder:
             cfg = get_config()
             self.api_key = cfg.siliconflow_api_key
         self.model = model
+        self.model_name = model
         self.dim = 1024
         self.base_url = "https://api.siliconflow.cn/v1"
     

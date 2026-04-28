@@ -48,8 +48,8 @@ def kernel_query(query: str, repo: str = "linux", top_k: int = 5) -> str:
     """Unified kernel query entry point. Automatically routes to appropriate tools based on intent."""
     intent = router.classify(query)
     
-    index_path = Path.home() / ".kernel-rag" / "repos" / repo
-    searcher = HybridSearcher(index_path, REPO_PATH)
+    # 使用配置好的索引路径，避免路径解析错误
+    searcher = HybridSearcher(INDEX_PATH, REPO_PATH)
     results = searcher.search(query, top_k=top_k)
     
     output = f"Intent: {intent}\n\nResults:\n"
