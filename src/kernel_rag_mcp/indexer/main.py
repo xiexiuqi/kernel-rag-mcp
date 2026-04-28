@@ -152,6 +152,7 @@ class Indexer:
                 print(f"  {batch_end}/{len(all_chunks)} ({100*batch_end//len(all_chunks)}%)", flush=True)
 
         metadata = {
+            "version": target,
             "repo_path": str(self.repo_path),
             "base": base,
             "target": target,
@@ -160,7 +161,8 @@ class Indexer:
             "embedding_model": self.embedder.model_name,
             "embedding_dim": self.embedder.dim,
         }
-        metadata_store.save(metadata)
+        for key, value in metadata.items():
+            metadata_store.update_metadata(key, value)
 
         self._save_chunks(index_dir, all_chunks)
 
