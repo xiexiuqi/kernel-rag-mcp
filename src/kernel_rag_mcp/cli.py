@@ -78,7 +78,11 @@ def index(repo, subsystems, base, target):
     click.echo(f"Indexing {repo}: {base}..{target} subsystems={subsys_list}")
     
     from kernel_rag_mcp.indexer.main import Indexer
-    indexer = Indexer(repo_path, DEFAULT_INDEX_ROOT / "repos" / repo)
+    from kernel_rag_mcp.config import Config
+    cfg = Config()
+    cfg.kernel_repo = repo_path
+    cfg.index_root = DEFAULT_INDEX_ROOT / "repos" / repo
+    indexer = Indexer(cfg)
     result = indexer.build_index(base, target, subsys_list)
     click.echo(f"Done. Index saved to: {result}")
 
