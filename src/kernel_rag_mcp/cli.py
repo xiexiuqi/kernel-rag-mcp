@@ -238,5 +238,8 @@ def mcp_install(client, repo):
     click.echo(f"MCP configuration installed for {client} at {config_path}")
     click.echo(f"Config: {json.dumps(config, indent=2)}")
 
+# 兼容 setuptools 入口引用 'main'
+main = cli
+
 if __name__ == "__main__":
     cli()
