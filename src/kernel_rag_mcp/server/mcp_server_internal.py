@@ -43,7 +43,7 @@ _graph_store = GraphStore(backend="networkx", path=INDEX_PATH)
 causal_tools = CausalTools(_graph_store)
 
 
-@mcp.tool()
+@mcp.tool(name="kernel_query")
 def kernel_query(query: str, repo: str = "linux", top_k: int = 5) -> str:
     """Unified kernel query entry point. Automatically routes to appropriate tools based on intent."""
     intent = router.classify(query)
@@ -61,7 +61,7 @@ def kernel_query(query: str, repo: str = "linux", top_k: int = 5) -> str:
     return output
 
 
-@mcp.tool()
+@mcp.tool(name="kernel_search")
 def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: int = 5) -> str:
     """Search kernel code by semantic query."""
     results = code_tools.kernel_search(query, subsys=subsys, top_k=top_k)
@@ -73,7 +73,7 @@ def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: in
     return output if output else "No results found"
 
 
-@mcp.tool()
+@mcp.tool(name="kernel_define")
 def kernel_define(symbol: str, repo: str = "linux") -> str:
     """Find exact definition of a symbol (function, struct, macro)."""
     result = code_tools.kernel_define(symbol)
@@ -84,7 +84,7 @@ def kernel_define(symbol: str, repo: str = "linux") -> str:
     return f"Symbol '{symbol}' not found"
 
 
-@mcp.tool()
+@mcp.tool(name="kernel_callers")
 def kernel_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
     """Find callers of a function. Use this for impact analysis."""
     callers = code_tools.kernel_callers(symbol, depth=depth)
@@ -99,7 +99,7 @@ def kernel_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
     return output
 
 
-@mcp.tool()
+@mcp.tool(name="kernel_diff")
 def kernel_diff(symbol: str, v1: str, v2: str, repo: str = "linux") -> str:
     """Show diff of a symbol between two versions."""
     result = code_tools.kernel_diff(symbol, v1, v2)
@@ -110,7 +110,7 @@ def kernel_diff(symbol: str, v1: str, v2: str, repo: str = "linux") -> str:
     return f"No changes found for {symbol}"
 
 
-@mcp.tool()
+@mcp.tool(name="git_search_commits")
 def git_search_commits(query: str, since: str = None, until: str = None, repo: str = "linux") -> str:
     """Search git commit history by query string."""
     commits = git_tools.git_search_commits(query, since=since, until=until)
@@ -125,7 +125,7 @@ def git_search_commits(query: str, since: str = None, until: str = None, repo: s
     return output
 
 
-@mcp.tool()
+@mcp.tool(name="git_blame_line")
 def git_blame_line(file: str, line: int, repo: str = "linux") -> str:
     """Find who introduced a specific line of code."""
     result = git_tools.git_blame_line(file, line)
@@ -133,7 +133,7 @@ def git_blame_line(file: str, line: int, repo: str = "linux") -> str:
     return f"Line {line} in {file} was introduced by {result.author} in commit {result.commit_hash[:8]} ({result.date})"
 
 
-@mcp.tool()
+@mcp.tool(name="git_changelog")
 def git_changelog(subsys: str, since_tag: str = None, until_tag: str = None, repo: str = "linux") -> str:
     """Generate changelog for a subsystem between tags."""
     result = git_tools.git_changelog(subsys, since_tag=since_tag, until_tag=until_tag)
@@ -148,7 +148,7 @@ def git_changelog(subsys: str, since_tag: str = None, until_tag: str = None, rep
     return output
 
 
-@mcp.tool()
+@mcp.tool(name="git_commit_context")
 def git_commit_context(commit_hash: str, repo: str = "linux") -> str:
     """Get full context of a commit including diff."""
     result = git_tools.git_commit_context(commit_hash)
@@ -160,7 +160,7 @@ def git_commit_context(commit_hash: str, repo: str = "linux") -> str:
     return output
 
 
-@mcp.tool()
+@mcp.tool(name="kconfig_describe")
 def kconfig_describe(config_name: str, repo: str = "linux") -> str:
     """Describe a Kconfig option (type, help, default)."""
     result = kconfig_tools.kconfig_describe(config_name)
@@ -171,7 +171,7 @@ def kconfig_describe(config_name: str, repo: str = "linux") -> str:
     return f"Config '{config_name}' not found"
 
 
-@mcp.tool()
+@mcp.tool(name="kconfig_deps")
 def kconfig_deps(config_name: str, repo: str = "linux") -> str:
     """Show dependencies of a Kconfig option."""
     result = kconfig_tools.kconfig_deps(config_name)
@@ -183,7 +183,7 @@ def kconfig_deps(config_name: str, repo: str = "linux") -> str:
     return output
 
 
-@mcp.tool()
+@mcp.tool(name="kconfig_check")
 def kconfig_check(config_dict: str, repo: str = "linux") -> str:
     """Check if a Kconfig combination is satisfiable. Pass config as JSON string."""
     import json
@@ -195,7 +195,7 @@ def kconfig_check(config_dict: str, repo: str = "linux") -> str:
         return "Invalid config format. Use JSON like '{\"CONFIG_SMP\": \"y\", \"CONFIG_NUMA\": \"n\"}'"
 
 
-@mcp.tool()
+@mcp.tool(name="kconfig_impact")
 def kconfig_impact(config_name: str, repo: str = "linux") -> str:
     """Show files affected by a Kconfig option."""
     result = kconfig_tools.kconfig_impact(config_name)
@@ -209,7 +209,7 @@ def kconfig_impact(config_name: str, repo: str = "linux") -> str:
     return f"No files found referencing {config_name}"
 
 
-@mcp.tool()
+@mcp.tool(name="git_search_by_type")
 def git_search_by_type(type_tags: str, subsys: str = None, since: str = None, until: str = None, repo: str = "linux") -> str:
     """Search commits by patch type tags. Pass type_tags as comma-separated string like 'performance,bugfix'."""
     if type_tools is None:
@@ -228,7 +228,7 @@ def git_search_by_type(type_tags: str, subsys: str = None, since: str = None, un
     return output
 
 
-@mcp.tool()
+@mcp.tool(name="git_type_stats")
 def git_type_stats(subsys: str = None, since: str = None, until: str = None, repo: str = "linux") -> str:
     """Show patch type distribution statistics."""
     if type_tools is None:
@@ -245,31 +245,31 @@ def git_type_stats(subsys: str = None, since: str = None, until: str = None, rep
     return output
 
 
-@mcp.tool()
+@mcp.tool(name="git_causal_chain")
 def git_causal_chain(commit_hash: str, direction: str = "upstream", repo: str = "linux") -> str:
     """Query the causal chain of a commit (upstream=bug origin, downstream=fixes)."""
     return causal_tools.git_causal_chain(commit_hash, direction=direction)
 
 
-@mcp.tool()
+@mcp.tool(name="git_bug_origin")
 def git_bug_origin(commit_hash: str, repo: str = "linux") -> str:
     """Find the root commit that introduced a bug."""
     return causal_tools.git_bug_origin(commit_hash)
 
 
-@mcp.tool()
+@mcp.tool(name="git_backport_status")
 def git_backport_status(commit_hash: str, repo: str = "linux") -> str:
     """Check backport status of a commit."""
     return causal_tools.git_backport_status(commit_hash)
 
 
-@mcp.tool()
+@mcp.tool(name="performance_top_k")
 def performance_top_k(subsys: str = "sched", k: int = 5, repo: str = "linux") -> str:
     """Find top K performance optimizations in a subsystem."""
     return f"Top {k} performance optimizations in {subsys}:\n(Performance indexing not yet fully implemented)"
 
 
-@mcp.tool()
+@mcp.tool(name="ctags_jump")
 def ctags_jump(symbol: str, repo: str = "linux") -> str:
     """Fast symbol lookup using ctags."""
     result = code_tools.kernel_define(symbol)
@@ -280,7 +280,7 @@ def ctags_jump(symbol: str, repo: str = "linux") -> str:
     return f"Symbol '{symbol}' not found"
 
 
-@mcp.tool()
+@mcp.tool(name="cscope_callers")
 def cscope_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
     """Find callers using cscope."""
     return kernel_callers(symbol, depth=depth, repo=repo)
