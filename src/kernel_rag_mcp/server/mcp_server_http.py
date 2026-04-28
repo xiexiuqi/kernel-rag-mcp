@@ -31,7 +31,6 @@ if __name__ == "__main__":
     
     print(f"Starting Kernel-RAG-MCP SSE server on http://{host}:{port}")
     print(f"SSE endpoint: http://{host}:{port}/sse")
-    print(f"Health check: http://{host}:{port}/health")
     
     if host == "127.0.0.1":
         print("\nNote: Only accessible from localhost.")
@@ -40,4 +39,11 @@ if __name__ == "__main__":
         print("\nWarning: DNS rebinding protection disabled. Only use in trusted networks.")
     
     import uvicorn
-    uvicorn.run(mcp.sse_app(), host=host, port=port, loop="asyncio")
+    # 使用 sse_app() 提供 ASGI 接口，uvicorn 负责 HTTP 服务
+    uvicorn.run(
+        mcp.sse_app(),
+        host=host,
+        port=port,
+        proxy_headers=False,
+        forwarded_allow_ips="*"
+    )
