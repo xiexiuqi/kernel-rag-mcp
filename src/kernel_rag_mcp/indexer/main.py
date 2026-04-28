@@ -4,6 +4,7 @@ from typing import List
 
 from .code_indexer import CodeIndexer
 from .embedders.code_embedder import CodeEmbedder
+from .embedders.siliconflow_embedder import SiliconFlowEmbedder
 from ..storage.vector_store import VectorStore
 from ..storage.sparse_store import SparseStore
 from ..storage.metadata_store import MetadataStore
@@ -17,11 +18,17 @@ class Indexer:
         self.repo_path = self.config.kernel_repo
         self.index_root = self.config.index_root
         self.code_indexer = CodeIndexer()
-        self.embedder = CodeEmbedder(
-            model_name=self.config.embedding_model,
-            dim=self.config.embedding_dim,
-            model_path=self.config.model_path
-        )
+        
+        # 优先使用 SiliconFlow 云端模型（有 API key 时）
+        if self.config.siliconflow_api_key:
+            self.embedder = SiliconFlowEmbedder(api_key=self.config.siliconflow_api_key)
+            print(f"Using SiliconFlow embedder: {self.embedder.model} ({self.embedder.dim}d)")
+        else:
+            self.embedder = CodeEmbedder(
+                model_name=self.config.embedding_model,
+                dim=self.config.embedding_dim,
+                model_path=self.config.model_path
+            )
 
     def build_index(self, base: str, target: str, subsystems: List[str],
                     resume: bool = True):
