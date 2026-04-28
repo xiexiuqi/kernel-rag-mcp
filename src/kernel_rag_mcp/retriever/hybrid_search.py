@@ -191,7 +191,7 @@ class HybridSearcher:
             chunk_id = r.id
             chunk = self._find_chunk(chunk_id)
             
-            if chunk and (not subsys or self._subsys_match(chunk.subsys, subsys)):
+            if chunk and (not subsys or self._subsys_match(chunk, subsys)):
                 code = self._read_code(chunk)
                 results.append(SearchResult(chunk, r.score, code))
         
@@ -232,14 +232,25 @@ class HybridSearcher:
                 return c
         return None
 
-    def _subsys_match(self, chunk_subsys: str, filter_subsys: str) -> bool:
-        if not chunk_subsys or not filter_subsys:
+    def _subsys_match(self, chunk: CodeChunk, filter_subsys: str) -> bool:
+        if not filter_subsys:
             return False
-        return (
+        chunk_subsys = chunk.subsys
+        file_path = chunk.file_path
+        
+        # Direct subsys match
+        if chunk_subsys and (
             chunk_subsys == filter_subsys
             or chunk_subsys.endswith(f"/{filter_subsys}")
             or filter_subsys.endswith(f"/{chunk_subsys}")
-        )
+        ):
+            return True
+        
+        # File path prefix match (e.g., "ext4" matches "fs/ext4/super.c")
+        if file_path and filter_subsys in file_path.split("/"):
+            return True
+        
+        return False
 
     def validate_line_number(self, result: SearchResult) -> LineValidationResult:
         if not self.repo_path or not result.chunk:

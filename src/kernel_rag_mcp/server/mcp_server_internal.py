@@ -290,17 +290,28 @@ def cscope_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
 def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
     """Search code using grep/ripgrep. NOTE: Use short code keywords (function names, variable names) for pattern, not full sentences."""
     import shutil, subprocess
+    from pathlib import Path
 
     try:
+        search_path = str(REPO_PATH)
+        include_pattern = path
+
+        # If path contains directory, search in that directory
+        if "/" in path:
+            dir_part = path.rsplit("/", 1)[0]
+            file_part = path.rsplit("/", 1)[1] if "/" in path else path
+            search_path = str(REPO_PATH / dir_part)
+            include_pattern = file_part
+
         # Prefer ripgrep (faster)
         if shutil.which("rg"):
             result = subprocess.run(
-                ["rg", "-n", "-S", "--type", path.replace("*.", ""), "--max-count", "20", pattern, str(REPO_PATH)],
+                ["rg", "-n", "-S", "--max-count", "20", pattern, search_path],
                 capture_output=True, text=True, timeout=10
             )
         else:
             result = subprocess.run(
-                ["grep", "-r", "-n", "--include", path, "-m", "20", pattern, str(REPO_PATH)],
+                ["grep", "-r", "-n", "--include", include_pattern, "-m", "20", pattern, search_path],
                 capture_output=True, text=True, timeout=10
             )
 
@@ -313,12 +324,12 @@ def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
                     try:
                         if shutil.which("rg"):
                             result2 = subprocess.run(
-                                ["rg", "-n", "-S", "--type", path.replace("*.", ""), "--max-count", "20", fallback_pattern, str(REPO_PATH)],
+                                ["rg", "-n", "-S", "--max-count", "20", fallback_pattern, search_path],
                                 capture_output=True, text=True, timeout=10
                             )
                         else:
                             result2 = subprocess.run(
-                                ["grep", "-r", "-n", "--include", path, "-m", "20", fallback_pattern, str(REPO_PATH)],
+                                ["grep", "-r", "-n", "--include", include_pattern, "-m", "20", fallback_pattern, search_path],
                                 capture_output=True, text=True, timeout=10
                             )
                         if result2.returncode == 0:
