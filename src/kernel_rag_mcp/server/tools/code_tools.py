@@ -46,6 +46,12 @@ class CodeTools:
         "scheduling": "kernel/sched",
         "scheduler": "kernel/sched",
         "memory": "mm",
+        "file system": "fs",
+        "filesystem": "fs",
+        "fs": "fs",
+        "usb": "drivers/usb",
+        "x86": "arch/x86",
+        "locking": "kernel/locking",
     }
 
     def _resolve_subsys(self, subsys: str) -> str:
