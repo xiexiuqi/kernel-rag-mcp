@@ -296,19 +296,32 @@ def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
         search_path = str(REPO_PATH)
         include_pattern = path
 
-        # If path contains directory, search in that directory
+        # If path contains directory, determine if it's a directory path or file pattern
         if "/" in path:
-            dir_part = path.rsplit("/", 1)[0]
-            file_part = path.rsplit("/", 1)[1] if "/" in path else path
-            search_path = str(REPO_PATH / dir_part)
-            include_pattern = file_part
+            full_path = REPO_PATH / path
+            if full_path.is_dir():
+                # path is a directory (e.g., "fs/ext4")
+                search_path = str(full_path)
+                include_pattern = "*"
+            else:
+                # path is a dir/file pattern (e.g., "fs/*.c")
+                dir_part = path.rsplit("/", 1)[0]
+                file_part = path.rsplit("/", 1)[1]
+                search_path = str(REPO_PATH / dir_part)
+                include_pattern = file_part
 
         # Prefer ripgrep (faster)
         if shutil.which("rg"):
-            result = subprocess.run(
-                ["rg", "-n", "-S", "--max-count", "20", pattern, search_path],
-                capture_output=True, text=True, timeout=10
-            )
+            if include_pattern and include_pattern != "*":
+                result = subprocess.run(
+                    ["rg", "-n", "-S", "--max-count", "20", "-g", include_pattern, pattern, search_path],
+                    capture_output=True, text=True, timeout=10
+                )
+            else:
+                result = subprocess.run(
+                    ["rg", "-n", "-S", "--max-count", "20", pattern, search_path],
+                    capture_output=True, text=True, timeout=10
+                )
         else:
             result = subprocess.run(
                 ["grep", "-r", "-n", "--include", include_pattern, "-m", "20", pattern, search_path],
@@ -323,10 +336,16 @@ def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
                     fallback_pattern = keywords[0]
                     try:
                         if shutil.which("rg"):
-                            result2 = subprocess.run(
-                                ["rg", "-n", "-S", "--max-count", "20", fallback_pattern, search_path],
-                                capture_output=True, text=True, timeout=10
-                            )
+                            if include_pattern and include_pattern != "*":
+                                result2 = subprocess.run(
+                                    ["rg", "-n", "-S", "--max-count", "20", "-g", include_pattern, fallback_pattern, search_path],
+                                    capture_output=True, text=True, timeout=10
+                                )
+                            else:
+                                result2 = subprocess.run(
+                                    ["rg", "-n", "-S", "--max-count", "20", fallback_pattern, search_path],
+                                    capture_output=True, text=True, timeout=10
+                                )
                         else:
                             result2 = subprocess.run(
                                 ["grep", "-r", "-n", "--include", include_pattern, "-m", "20", fallback_pattern, search_path],
