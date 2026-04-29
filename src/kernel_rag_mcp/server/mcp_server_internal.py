@@ -9,6 +9,7 @@ from .tools.git_tools import GitTools
 from .tools.kconfig_tools import KconfigTools
 from .tools.type_tools import TypeTools
 from .tools.causal_tools import CausalTools
+from .tools.code_reader import CodeReader, VersionManager
 from ..retriever.hybrid_search import HybridSearcher
 from ..indexer.performance_indexer import PerformanceIndexer
 from ..storage.graph_store import GraphStore
@@ -23,7 +24,15 @@ router = IntentRouter()
 # Load configuration from ~/.kernel-rag/config.json
 _cfg = get_config()
 REPO_PATH = _cfg.kernel_repo
-INDEX_PATH = _cfg.index_dir("v7.0")
+INDEX_ROOT = _cfg.index_root
+
+# Initialize version manager and code reader
+version_mgr = VersionManager(INDEX_ROOT, REPO_PATH)
+code_reader = CodeReader(REPO_PATH)
+
+# Detect current version (dynamic, not hardcoded)
+CURRENT_VERSION = version_mgr.detect_current_version()
+INDEX_PATH = version_mgr.get_index_path(CURRENT_VERSION)
 
 # Initialize tools
 code_tools = CodeTools(REPO_PATH, INDEX_PATH)
@@ -114,54 +123,45 @@ def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: in
 
 
 @mcp.tool(name="kernel_define")
-def kernel_define(symbol: str, repo: str = "linux") -> dict:
-    """Find exact definition of a symbol (function, struct, macro)."""
-    result = code_tools.kernel_define(symbol)
+def kernel_define(symbol: str, repo: str = "linux", version: str = None) -> dict:
+    """Find exact definition of a symbol (function, struct, macro).
     
-    if result:
-        # 读取完整函数代码（最多500行，遇到函数结束符}停止）
-        code_content = ""
-        if result.file_path and REPO_PATH:
-            try:
-                file_path = REPO_PATH / result.file_path
-                if file_path.exists():
-                    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                        lines = f.readlines()
-                        start = max(0, result.line - 1)
-                        
-                        # 查找函数结束：遇到单独的 "}" 行（可能带注释）
-                        end = min(len(lines), start + 500)  # 最多500行上限
-                        brace_count = 0
-                        in_function = False
-                        
-                        for i in range(start, end):
-                            line = lines[i]
-                            # 统计花括号（粗略）
-                            brace_count += line.count('{')
-                            brace_count -= line.count('}')
-                            
-                            if '{' in line:
-                                in_function = True
-                            
-                            # 如果已经进入函数且花括号平衡，认为函数结束
-                            if in_function and brace_count <= 0 and i > start + 1:
-                                end = i + 1
-                                break
-                        
-                        code_content = ''.join(lines[start:end])
-            except Exception:
-                pass
+    参数:
+        symbol: 符号名（如 schedule, struct task_struct）
+        version: 版本标签（如 v6.19, v7.0），None 表示当前版本
+    """
+    # 根据版本选择索引路径
+    idx_path = version_mgr.get_index_path(version) if version else INDEX_PATH
+    
+    # 临时创建对应版本的查询工具
+    if version and idx_path != INDEX_PATH and idx_path.exists():
+        searcher = HybridSearcher(idx_path, REPO_PATH)
+        results = searcher.search(symbol, top_k=1)
+    else:
+        results = code_tools.searcher.search(symbol, top_k=1)
+    
+    if results:
+        r = results[0]
+        
+        # 使用 CodeReader 读取完整函数（通过 Git 支持多版本）
+        code_content = code_reader.read_function(
+            r.chunk.file_path, 
+            r.chunk.name, 
+            version
+        )
         
         return {
-            "symbol": result.name,
-            "file_path": result.file_path,
-            "line": result.line,
+            "symbol": r.chunk.name,
+            "file_path": r.chunk.file_path,
+            "line": r.chunk.start_line,
             "code": code_content,
+            "version": version or CURRENT_VERSION,
             "found": True
         }
     
     return {
         "symbol": symbol,
+        "version": version or CURRENT_VERSION,
         "found": False,
         "error": f"Symbol '{symbol}' not found"
     }
