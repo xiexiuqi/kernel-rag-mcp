@@ -161,8 +161,7 @@ class Indexer:
             "embedding_model": self.embedder.model_name,
             "embedding_dim": self.embedder.dim,
         }
-        for key, value in metadata.items():
-            metadata_store.update_metadata(key, value)
+        metadata_store.save_metadata(metadata)
 
         self._save_chunks(index_dir, all_chunks, metadata_store)
 
