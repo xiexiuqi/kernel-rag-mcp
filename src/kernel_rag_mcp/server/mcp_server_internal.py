@@ -195,15 +195,17 @@ def git_changelog(subsys: str, since_tag: str = None, until_tag: str = None, rep
 
 
 @mcp.tool(name="git_commit_context")
-def git_commit_context(commit_hash: str, repo: str = "linux") -> str:
+def git_commit_context(commit_hash: str, repo: str = "linux") -> dict:
     """Get full context of a commit including diff."""
     result = git_tools.git_commit_context(commit_hash)
     
-    output = f"Commit {result.hash[:8]}: {result.title}\n"
-    output += f"Author: {result.author}, Date: {result.date}\n\n"
-    output += f"Diff:\n{result.diff[:1000]}"
-    
-    return output
+    return {
+        "commit": result.hash[:8],
+        "title": result.title,
+        "author": result.author,
+        "date": result.date,
+        "diff": result.diff[:1000]
+    }
 
 
 @mcp.tool(name="kconfig_describe")
