@@ -157,7 +157,26 @@ class GitTools:
         except subprocess.CalledProcessError:
             return BlameResult(commit_hash="", author="", line=line)
     
+    SUBSYS_ALIASES = {
+        "sched": "kernel/sched",
+        "mm": "mm",
+        "net": "net",
+        "ext4": "fs/ext4",
+        "fs": "fs",
+        "block": "block",
+        "usb": "drivers/usb",
+        "x86": "arch/x86",
+        "locking": "kernel/locking",
+    }
+
+    def _resolve_subsys(self, subsys: str) -> str:
+        if not subsys:
+            return subsys
+        subsys = subsys.lower().strip()
+        return self.SUBSYS_ALIASES.get(subsys, subsys)
+
     def git_changelog(self, subsys: str, since_tag: Optional[str] = None, until_tag: Optional[str] = None) -> ChangelogResult:
+        subsys = self._resolve_subsys(subsys)
         range_str = f"{since_tag}..{until_tag}" if since_tag and until_tag else "HEAD~100..HEAD"
         
         try:
