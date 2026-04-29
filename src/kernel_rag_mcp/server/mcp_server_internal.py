@@ -45,7 +45,16 @@ causal_tools = CausalTools(_graph_store)
 
 @mcp.tool(name="kernel_query")
 def kernel_query(query: str, repo: str = "linux", top_k: int = 5) -> str:
-    """Unified kernel query entry point. Automatically routes to appropriate tools based on intent."""
+    """万能内核查询入口。当用户问任何与 Linux 内核相关的问题时，优先调用此工具。
+    
+    适用场景：
+    - "ext4 有什么新特性？"
+    - "schedule() 函数怎么实现？"
+    - "CFS 调度器的工作原理"
+    - "TCP 拥塞控制最新改动"
+    - "内存管理的页分配机制"
+    
+    此工具会自动识别意图并路由到最佳工具。"""
     intent = router.classify(query)
     
     # 使用配置好的索引路径，避免路径解析错误
@@ -63,7 +72,15 @@ def kernel_query(query: str, repo: str = "linux", top_k: int = 5) -> str:
 
 @mcp.tool(name="kernel_search")
 def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: int = 5) -> str:
-    """Search kernel code by semantic query."""
+    """语义搜索内核代码。当用户用自然语言询问内核实现、机制、原理时调用。
+    
+    适用场景：
+    - "CFS 怎么更新 vruntime？"
+    - "TCP 三次握手在哪里实现？"
+    - "内存回收的 LRU 算法"
+    - "ext4 文件系统的日志机制"
+    
+    比 grep 更适合自然语言查询，会返回最相关的代码片段及行号。"""
     results = code_tools.kernel_search(query, subsys=subsys, top_k=top_k)
     
     output = ""
@@ -86,7 +103,14 @@ def kernel_define(symbol: str, repo: str = "linux") -> str:
 
 @mcp.tool(name="kernel_callers")
 def kernel_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
-    """Find callers of a function. Use this for impact analysis."""
+    """查找函数的调用者。当用户问"谁调用了这个函数"或"改了会影响谁"时调用。
+    
+    适用场景：
+    - "谁调用了 schedule()？"
+    - "改了 update_curr 会影响哪些地方？"
+    - "这个函数的调用链是什么？"
+    
+    参数 depth 控制递归深度，1=直接调用者，2=二级调用者。"""
     callers = code_tools.kernel_callers(symbol, depth=depth)
     
     if not callers:
@@ -112,7 +136,15 @@ def kernel_diff(symbol: str, v1: str, v2: str, repo: str = "linux") -> str:
 
 @mcp.tool(name="git_search_commits")
 def git_search_commits(query: str, since: str = None, until: str = None, repo: str = "linux") -> str:
-    """Search git commit history by query string."""
+    """搜索 Git 提交历史。当用户询问内核变更、补丁、提交记录时调用。
+    
+    适用场景：
+    - "ext4 最近有什么改动？"
+    - "v6.12 到 v7.0 之间 schedule 变了什么？"
+    - "谁修复了 TCP 的 RTO bug？"
+    - "查找和内存回收相关的提交"
+    
+    since/until 可以是标签如 'v6.12' 或日期如 '2025-01-01'。"""
     commits = git_tools.git_search_commits(query, since=since, until=until)
     
     if not commits:
@@ -127,7 +159,14 @@ def git_search_commits(query: str, since: str = None, until: str = None, repo: s
 
 @mcp.tool(name="git_blame_line")
 def git_blame_line(file: str, line: int, repo: str = "linux") -> str:
-    """Find who introduced a specific line of code."""
+    """追溯某行代码的作者。当用户问"这行代码是谁写的"或"谁引入了这个"时调用。
+    
+    适用场景：
+    - "kernel/sched/core.c 第 100 行是谁写的？"
+    - "这个 bug 是哪个人引入的？"
+    - "这段代码的历史作者是谁？"
+    
+    返回：作者名、提交哈希、日期。"""
     result = git_tools.git_blame_line(file, line)
     
     return f"Line {line} in {file} was introduced by {result.author} in commit {result.commit_hash[:8]} ({result.date})"
@@ -135,7 +174,14 @@ def git_blame_line(file: str, line: int, repo: str = "linux") -> str:
 
 @mcp.tool(name="git_changelog")
 def git_changelog(subsys: str, since_tag: str = None, until_tag: str = None, repo: str = "linux") -> str:
-    """Generate changelog for a subsystem between tags."""
+    """生成子系统的变更日志。当用户问"某个子系统最近改了什么"时调用。
+    
+    适用场景：
+    - "sched 子系统 v7.0 有什么新特性？"
+    - "mm 子系统从 v6.12 到 v7.0 的变更"
+    - "ext4 文件系统最近的改动列表"
+    
+    subsys 可以是 'sched', 'mm', 'net', 'ext4', 'fs' 等。"""
     result = git_tools.git_changelog(subsys, since_tag=since_tag, until_tag=until_tag)
     
     if not result.entries:
@@ -162,7 +208,14 @@ def git_commit_context(commit_hash: str, repo: str = "linux") -> str:
 
 @mcp.tool(name="kconfig_describe")
 def kconfig_describe(config_name: str, repo: str = "linux") -> str:
-    """Describe a Kconfig option (type, help, default)."""
+    """查询内核配置选项的详细信息。当用户问"CONFIG_XXX 是什么"时调用。
+    
+    适用场景：
+    - "CONFIG_SMP 是什么意思？"
+    - "CONFIG_NUMA 的默认值是什么？"
+    - "这个配置选项有什么作用？"
+    
+    返回：类型、帮助文本、默认值。"""
     result = kconfig_tools.kconfig_describe(config_name)
     
     if result:
@@ -288,7 +341,15 @@ def cscope_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
 
 @mcp.tool(name="grep_code")
 def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
-    """Search code using grep/ripgrep. NOTE: Use short code keywords (function names, variable names) for pattern, not full sentences."""
+    """精确文本搜索内核代码。当用户提到具体函数名、变量名、宏时调用。
+    
+    适用场景：
+    - "ext4 文件系统在哪里定义？" → grep_code("ext4", "fs/ext4")
+    - "查找所有使用 spin_lock 的地方" → grep_code("spin_lock")
+    - "TCP 的 head 结构体在哪？" → grep_code("struct tcphdr", "net/ipv4")
+    
+    pattern 应该是代码关键字，不要用完整句子。
+    path 可以是目录如 "fs/ext4" 或文件模式如 "*.c"。"""
     import shutil, subprocess
     from pathlib import Path
 
