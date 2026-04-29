@@ -91,14 +91,23 @@ def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: in
 
 
 @mcp.tool(name="kernel_define")
-def kernel_define(symbol: str, repo: str = "linux") -> str:
+def kernel_define(symbol: str, repo: str = "linux") -> dict:
     """Find exact definition of a symbol (function, struct, macro)."""
     result = code_tools.kernel_define(symbol)
     
     if result:
-        return f"{result.name} defined at {result.file_path}:{result.line}"
+        return {
+            "symbol": result.name,
+            "file_path": result.file_path,
+            "line": result.line,
+            "found": True
+        }
     
-    return f"Symbol '{symbol}' not found"
+    return {
+        "symbol": symbol,
+        "found": False,
+        "error": f"Symbol '{symbol}' not found"
+    }
 
 
 @mcp.tool(name="kernel_callers")
