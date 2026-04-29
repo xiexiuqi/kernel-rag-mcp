@@ -89,7 +89,7 @@ def kernel_query(query: str, repo: str = "linux", top_k: int = 5) -> dict:
 
 
 @mcp.tool(name="kernel_search")
-def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: int = 5) -> dict:
+def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: int = 5, version: str = None) -> dict:
     """语义搜索内核代码。当用户用自然语言询问内核实现、机制、原理时调用。
     
     适用场景：
@@ -98,24 +98,46 @@ def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: in
     - "内存回收的 LRU 算法"
     - "ext4 文件系统的日志机制"
     
+    参数:
+        query: 自然语言查询
+        subsys: 子系统过滤（如 sched, mm, net）
+        top_k: 返回结果数量
+        version: 版本标签（如 v6.19, v7.0），None 表示当前版本
+    
     比 grep 更适合自然语言查询，会返回最相关的代码片段及行号。"""
-    results = code_tools.kernel_search(query, subsys=subsys, top_k=top_k)
+    # 根据版本选择索引
+    idx_path = version_mgr.get_index_path(version) if version else INDEX_PATH
+    
+    if version and idx_path != INDEX_PATH and idx_path.exists():
+        # 使用指定版本的索引
+        tools = CodeTools(REPO_PATH, idx_path)
+        results = tools.kernel_search(query, subsys=subsys, top_k=top_k)
+    else:
+        results = code_tools.kernel_search(query, subsys=subsys, top_k=top_k)
     
     results_list = []
     for i, r in enumerate(results, 1):
+        # 使用 CodeReader 读取完整代码（支持多版本）
+        code_content = r.content if r.content else ""
+        if not code_content and r.file_path:
+            code_content = code_reader.read_code(
+                r.file_path, r.start_line, r.end_line, version
+            )
+        
         item = {
             "rank": i,
             "file_path": r.file_path,
             "line": r.start_line,
+            "end_line": r.end_line,
             "name": r.file_path.split("/")[-1] if "/" in r.file_path else r.file_path,
-            "code": r.content if r.content else "",
-            "end_line": r.end_line
+            "code": code_content
         }
         results_list.append(item)
     
     return {
         "query": query,
         "subsys": subsys,
+        "version": version or CURRENT_VERSION,
         "total": len(results_list),
         "results": results_list,
         "found": len(results_list) > 0
