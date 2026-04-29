@@ -44,7 +44,7 @@ causal_tools = CausalTools(_graph_store)
 
 
 @mcp.tool(name="kernel_query")
-def kernel_query(query: str, repo: str = "linux", top_k: int = 5) -> str:
+def kernel_query(query: str, repo: str = "linux", top_k: int = 5) -> dict:
     """万能内核查询入口。当用户问任何与 Linux 内核相关的问题时，优先调用此工具。
     
     适用场景：
@@ -61,17 +61,26 @@ def kernel_query(query: str, repo: str = "linux", top_k: int = 5) -> str:
     searcher = HybridSearcher(INDEX_PATH, REPO_PATH)
     results = searcher.search(query, top_k=top_k)
     
-    output = f"Intent: {intent}\n\nResults:\n"
+    results_list = []
     for i, r in enumerate(results, 1):
-        output += f"{i}. {r.chunk.file_path}:{r.chunk.start_line} {r.chunk.name}\n"
-        if r.code:
-            output += f"   {r.code[:100]}...\n"
+        item = {
+            "rank": i,
+            "file_path": r.chunk.file_path,
+            "line": r.chunk.start_line,
+            "name": r.chunk.name,
+            "code_preview": r.code[:100] if r.code else ""
+        }
+        results_list.append(item)
     
-    return output
+    return {
+        "intent": intent,
+        "total": len(results_list),
+        "results": results_list
+    }
 
 
 @mcp.tool(name="kernel_search")
-def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: int = 5) -> str:
+def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: int = 5) -> dict:
     """语义搜索内核代码。当用户用自然语言询问内核实现、机制、原理时调用。
     
     适用场景：
@@ -83,11 +92,24 @@ def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: in
     比 grep 更适合自然语言查询，会返回最相关的代码片段及行号。"""
     results = code_tools.kernel_search(query, subsys=subsys, top_k=top_k)
     
-    output = ""
+    results_list = []
     for i, r in enumerate(results, 1):
-        output += f"{i}. {r.file_path}:{r.start_line} {r.content[:50]}...\n"
+        item = {
+            "rank": i,
+            "file_path": r.file_path,
+            "line": r.start_line,
+            "name": r.file_path.split("/")[-1] if "/" in r.file_path else r.file_path,
+            "code_preview": r.content[:50] if r.content else ""
+        }
+        results_list.append(item)
     
-    return output if output else "No results found"
+    return {
+        "query": query,
+        "subsys": subsys,
+        "total": len(results_list),
+        "results": results_list,
+        "found": len(results_list) > 0
+    }
 
 
 @mcp.tool(name="kernel_define")
@@ -111,7 +133,7 @@ def kernel_define(symbol: str, repo: str = "linux") -> dict:
 
 
 @mcp.tool(name="kernel_callers")
-def kernel_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
+def kernel_callers(symbol: str, depth: int = 1, repo: str = "linux") -> dict:
     """查找函数的调用者。当用户问"谁调用了这个函数"或"改了会影响谁"时调用。
     
     适用场景：
@@ -122,29 +144,46 @@ def kernel_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
     参数 depth 控制递归深度，1=直接调用者，2=二级调用者。"""
     callers = code_tools.kernel_callers(symbol, depth=depth)
     
-    if not callers:
-        return f"No callers found for '{symbol}'"
-    
-    output = f"Callers of {symbol}:\n"
+    callers_list = []
     for c in callers:
-        output += f"  - {c.caller_name}\n"
+        callers_list.append({
+            "caller_name": c.caller_name,
+            "file_path": c.file_path,
+            "line": c.line
+        })
     
-    return output
+    return {
+        "symbol": symbol,
+        "depth": depth,
+        "total": len(callers_list),
+        "callers": callers_list,
+        "found": len(callers_list) > 0
+    }
 
 
 @mcp.tool(name="kernel_diff")
-def kernel_diff(symbol: str, v1: str, v2: str, repo: str = "linux") -> str:
+def kernel_diff(symbol: str, v1: str, v2: str, repo: str = "linux") -> dict:
     """Show diff of a symbol between two versions."""
     result = code_tools.kernel_diff(symbol, v1, v2)
     
-    if result.changes:
-        return f"Changes for {symbol} between {v1} and {v2}:\n{result.changes[0].get('diff', '')[:500]}"
+    changes = []
+    for c in result.changes[:5]:
+        changes.append({
+            "diff": c.get('diff', '')[:500] if isinstance(c, dict) else str(c)[:500]
+        })
     
-    return f"No changes found for {symbol}"
+    return {
+        "symbol": symbol,
+        "v1": v1,
+        "v2": v2,
+        "total_changes": len(result.changes),
+        "changes": changes,
+        "found": len(result.changes) > 0
+    }
 
 
 @mcp.tool(name="git_search_commits")
-def git_search_commits(query: str, since: str = None, until: str = None, repo: str = "linux") -> str:
+def git_search_commits(query: str, since: str = None, until: str = None, repo: str = "linux") -> dict:
     """搜索 Git 提交历史。当用户询问内核变更、补丁、提交记录时调用。
     
     适用场景：
@@ -156,18 +195,27 @@ def git_search_commits(query: str, since: str = None, until: str = None, repo: s
     since/until 可以是标签如 'v6.12' 或日期如 '2025-01-01'。"""
     commits = git_tools.git_search_commits(query, since=since, until=until)
     
-    if not commits:
-        return f"No commits found matching '{query}'"
-    
-    output = f"Commits matching '{query}':\n"
+    commits_list = []
     for c in commits[:10]:
-        output += f"  {c.hash[:8]}: {c.title} ({c.author}, {c.date})\n"
+        commits_list.append({
+            "hash": c.hash[:8],
+            "title": c.title,
+            "author": c.author,
+            "date": c.date
+        })
     
-    return output
+    return {
+        "query": query,
+        "since": since,
+        "until": until,
+        "total": len(commits_list),
+        "commits": commits_list,
+        "found": len(commits_list) > 0
+    }
 
 
 @mcp.tool(name="git_blame_line")
-def git_blame_line(file: str, line: int, repo: str = "linux") -> str:
+def git_blame_line(file: str, line: int, repo: str = "linux") -> dict:
     """追溯某行代码的作者。当用户问"这行代码是谁写的"或"谁引入了这个"时调用。
     
     适用场景：
@@ -178,11 +226,17 @@ def git_blame_line(file: str, line: int, repo: str = "linux") -> str:
     返回：作者名、提交哈希、日期。"""
     result = git_tools.git_blame_line(file, line)
     
-    return f"Line {line} in {file} was introduced by {result.author} in commit {result.commit_hash[:8]} ({result.date})"
+    return {
+        "file": file,
+        "line": line,
+        "author": result.author,
+        "commit_hash": result.commit_hash[:8],
+        "date": result.date
+    }
 
 
 @mcp.tool(name="git_changelog")
-def git_changelog(subsys: str, since_tag: str = None, until_tag: str = None, repo: str = "linux") -> str:
+def git_changelog(subsys: str, since_tag: str = None, until_tag: str = None, repo: str = "linux") -> dict:
     """生成子系统的变更日志。当用户问"某个子系统最近改了什么"时调用。
     
     适用场景：
@@ -193,14 +247,23 @@ def git_changelog(subsys: str, since_tag: str = None, until_tag: str = None, rep
     subsys 可以是 'sched', 'mm', 'net', 'ext4', 'fs' 等。"""
     result = git_tools.git_changelog(subsys, since_tag=since_tag, until_tag=until_tag)
     
-    if not result.entries:
-        return f"No changes found for {subsys}"
-    
-    output = f"Changelog for {subsys}:\n"
+    entries = []
     for e in result.entries[:10]:
-        output += f"  {e['hash'][:8]}: {e['title']}\n"
+        entries.append({
+            "hash": e['hash'][:8],
+            "title": e['title'],
+            "author": e.get('author', ''),
+            "date": e.get('date', '')
+        })
     
-    return output
+    return {
+        "subsys": subsys,
+        "since_tag": since_tag,
+        "until_tag": until_tag,
+        "total": len(entries),
+        "entries": entries,
+        "found": len(entries) > 0
+    }
 
 
 @mcp.tool(name="git_commit_context")
@@ -218,7 +281,7 @@ def git_commit_context(commit_hash: str, repo: str = "linux") -> dict:
 
 
 @mcp.tool(name="kconfig_describe")
-def kconfig_describe(config_name: str, repo: str = "linux") -> str:
+def kconfig_describe(config_name: str, repo: str = "linux") -> dict:
     """查询内核配置选项的详细信息。当用户问"CONFIG_XXX 是什么"时调用。
     
     适用场景：
@@ -230,128 +293,194 @@ def kconfig_describe(config_name: str, repo: str = "linux") -> str:
     result = kconfig_tools.kconfig_describe(config_name)
     
     if result:
-        return f"{result.name} ({result.type}):\nHelp: {result.help}\nDefault: {result.default}"
+        return {
+            "config_name": result.name,
+            "type": result.type,
+            "help": result.help,
+            "default": result.default,
+            "found": True
+        }
     
-    return f"Config '{config_name}' not found"
+    return {
+        "config_name": config_name,
+        "found": False,
+        "error": f"Config '{config_name}' not found"
+    }
 
 
 @mcp.tool(name="kconfig_deps")
-def kconfig_deps(config_name: str, repo: str = "linux") -> str:
+def kconfig_deps(config_name: str, repo: str = "linux") -> dict:
     """Show dependencies of a Kconfig option."""
     result = kconfig_tools.kconfig_deps(config_name)
     
-    output = f"Dependencies for {config_name}:\n"
-    output += f"Direct: {', '.join(result.direct_deps) if result.direct_deps else 'None'}\n"
-    output += f"All: {', '.join(result.all_deps) if result.all_deps else 'None'}"
-    
-    return output
+    return {
+        "config_name": config_name,
+        "direct_deps": result.direct_deps,
+        "all_deps": result.all_deps,
+        "total_direct": len(result.direct_deps),
+        "total_all": len(result.all_deps)
+    }
 
 
 @mcp.tool(name="kconfig_check")
-def kconfig_check(config_dict: str, repo: str = "linux") -> str:
+def kconfig_check(config_dict: str, repo: str = "linux") -> dict:
     """Check if a Kconfig combination is satisfiable. Pass config as JSON string."""
     import json
     try:
         configs = json.loads(config_dict)
         result = kconfig_tools.kconfig_check(configs)
-        return f"Configuration is {'valid' if result.satisfiable else 'invalid'}"
+        return {
+            "config_dict": configs,
+            "satisfiable": result.satisfiable,
+            "valid": result.satisfiable
+        }
     except json.JSONDecodeError:
-        return "Invalid config format. Use JSON like '{\"CONFIG_SMP\": \"y\", \"CONFIG_NUMA\": \"n\"}'"
+        return {
+            "error": "Invalid config format. Use JSON like '{\"CONFIG_SMP\": \"y\", \"CONFIG_NUMA\": \"n\"}'",
+            "satisfiable": False,
+            "valid": False
+        }
 
 
 @mcp.tool(name="kconfig_impact")
-def kconfig_impact(config_name: str, repo: str = "linux") -> str:
+def kconfig_impact(config_name: str, repo: str = "linux") -> dict:
     """Show files affected by a Kconfig option."""
     result = kconfig_tools.kconfig_impact(config_name)
     
-    if result.affected_files:
-        output = f"Files affected by {config_name}:\n"
-        for f in result.affected_files[:20]:
-            output += f"  {f}\n"
-        return output
-    
-    return f"No files found referencing {config_name}"
+    return {
+        "config_name": config_name,
+        "total_files": len(result.affected_files),
+        "affected_files": result.affected_files[:20],
+        "found": len(result.affected_files) > 0
+    }
 
 
 @mcp.tool(name="git_search_by_type")
-def git_search_by_type(type_tags: str, subsys: str = None, since: str = None, until: str = None, repo: str = "linux") -> str:
+def git_search_by_type(type_tags: str, subsys: str = None, since: str = None, until: str = None, repo: str = "linux") -> dict:
     """Search commits by patch type tags. Pass type_tags as comma-separated string like 'performance,bugfix'."""
     if type_tools is None:
-        return "Type tools not available (no index found)"
+        return {
+            "error": "Type tools not available (no index found)",
+            "found": False
+        }
     
     tags = [t.strip() for t in type_tags.split(",")]
     results = type_tools.git_search_by_type(tags, subsys=subsys, since=since, until=until)
     
-    if not results:
-        return f"No commits found with tags '{type_tags}'"
-    
-    output = f"Commits with tags '{type_tags}':\n"
+    commits_list = []
     for r in results[:10]:
-        output += f"  {r['hash'][:8]}: {r['title']} ({r.get('type_tags', '')})\n"
+        commits_list.append({
+            "hash": r['hash'][:8],
+            "title": r['title'],
+            "type_tags": r.get('type_tags', [])
+        })
     
-    return output
+    return {
+        "type_tags": tags,
+        "total": len(commits_list),
+        "commits": commits_list,
+        "found": len(commits_list) > 0
+    }
 
 
 @mcp.tool(name="git_type_stats")
-def git_type_stats(subsys: str = None, since: str = None, until: str = None, repo: str = "linux") -> str:
+def git_type_stats(subsys: str = None, since: str = None, until: str = None, repo: str = "linux") -> dict:
     """Show patch type distribution statistics."""
     if type_tools is None:
-        return "Type tools not available (no index found)"
+        return {
+            "error": "Type tools not available (no index found)",
+            "total": 0
+        }
     
     stats = type_tools.git_type_stats(subsys=subsys, since=since, until=until)
     
-    output = f"Patch type statistics:\n"
-    output += f"Total commits: {stats.get('total', 0)}\n"
+    type_distribution = {}
     for tag, count in sorted(stats.items()):
         if tag != "total":
-            output += f"  {tag}: {count}\n"
+            type_distribution[tag] = count
     
-    return output
+    return {
+        "total_commits": stats.get('total', 0),
+        "type_distribution": type_distribution,
+        "subsys": subsys,
+        "since": since,
+        "until": until
+    }
 
 
 @mcp.tool(name="git_causal_chain")
-def git_causal_chain(commit_hash: str, direction: str = "upstream", repo: str = "linux") -> str:
+def git_causal_chain(commit_hash: str, direction: str = "upstream", repo: str = "linux") -> dict:
     """Query the causal chain of a commit (upstream=bug origin, downstream=fixes)."""
-    return causal_tools.git_causal_chain(commit_hash, direction=direction)
+    result = causal_tools.git_causal_chain(commit_hash, direction=direction)
+    return {
+        "commit_hash": commit_hash,
+        "direction": direction,
+        "chain": result if isinstance(result, list) else []
+    }
 
 
 @mcp.tool(name="git_bug_origin")
-def git_bug_origin(commit_hash: str, repo: str = "linux") -> str:
+def git_bug_origin(commit_hash: str, repo: str = "linux") -> dict:
     """Find the root commit that introduced a bug."""
-    return causal_tools.git_bug_origin(commit_hash)
+    result = causal_tools.git_bug_origin(commit_hash)
+    return {
+        "commit_hash": commit_hash,
+        "origin_commit": result,
+        "found": result is not None
+    }
 
 
 @mcp.tool(name="git_backport_status")
-def git_backport_status(commit_hash: str, repo: str = "linux") -> str:
+def git_backport_status(commit_hash: str, repo: str = "linux") -> dict:
     """Check backport status of a commit."""
-    return causal_tools.git_backport_status(commit_hash)
+    result = causal_tools.git_backport_status(commit_hash)
+    return {
+        "commit_hash": commit_hash,
+        "status": result,
+        "backported": result == "backported" if isinstance(result, str) else False
+    }
 
 
 @mcp.tool(name="performance_top_k")
-def performance_top_k(subsys: str = "sched", k: int = 5, repo: str = "linux") -> str:
+def performance_top_k(subsys: str = "sched", k: int = 5, repo: str = "linux") -> dict:
     """Find top K performance optimizations in a subsystem."""
-    return f"Top {k} performance optimizations in {subsys}:\n(Performance indexing not yet fully implemented)"
+    return {
+        "subsys": subsys,
+        "k": k,
+        "optimizations": [],
+        "note": "Performance indexing not yet fully implemented"
+    }
 
 
 @mcp.tool(name="ctags_jump")
-def ctags_jump(symbol: str, repo: str = "linux") -> str:
+def ctags_jump(symbol: str, repo: str = "linux") -> dict:
     """Fast symbol lookup using ctags."""
     result = code_tools.kernel_define(symbol)
     
     if result:
-        return f"{result.name} at {result.file_path}:{result.line}"
+        return {
+            "symbol": result.name,
+            "file_path": result.file_path,
+            "line": result.line,
+            "found": True
+        }
     
-    return f"Symbol '{symbol}' not found"
+    return {
+        "symbol": symbol,
+        "found": False,
+        "error": f"Symbol '{symbol}' not found"
+    }
 
 
 @mcp.tool(name="cscope_callers")
-def cscope_callers(symbol: str, depth: int = 1, repo: str = "linux") -> str:
+def cscope_callers(symbol: str, depth: int = 1, repo: str = "linux") -> dict:
     """Find callers using cscope."""
-    return kernel_callers(symbol, depth=depth, repo=repo)
+    result = kernel_callers(symbol, depth=depth, repo=repo)
+    return result
 
 
 @mcp.tool(name="grep_code")
-def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
+def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> dict:
     """精确文本搜索内核代码。当用户提到具体函数名、变量名、宏时调用。
     
     适用场景：
@@ -425,16 +554,47 @@ def grep_code(pattern: str, path: str = "*.c", repo: str = "linux") -> str:
                             )
                         if result2.returncode == 0:
                             lines = result2.stdout.strip().split("\n")[:20]
-                            return f"No exact match for '{pattern}'. Showing results for keyword '{fallback_pattern}':\n" + "\n".join(lines)
+                            return {
+                                "pattern": pattern,
+                                "fallback": fallback_pattern,
+                                "matches": lines,
+                                "total": len(lines),
+                                "found": True,
+                                "note": f"Showing results for keyword '{fallback_pattern}'"
+                            }
                     except Exception:
                         pass
-            return f"No matches found for '{pattern}'"
+            return {
+                "pattern": pattern,
+                "matches": [],
+                "total": 0,
+                "found": False,
+                "error": f"No matches found for '{pattern}'"
+            }
         lines = result.stdout.strip().split("\n")[:20]
-        return "\n".join(lines)
+        return {
+            "pattern": pattern,
+            "path": path,
+            "matches": lines,
+            "total": len(lines),
+            "found": len(lines) > 0
+        }
     except subprocess.TimeoutExpired:
-        return f"Search timed out for '{pattern}'. Try a more specific keyword."
-    except Exception:
-        return f"Search error for '{pattern}'"
+        return {
+            "pattern": pattern,
+            "matches": [],
+            "total": 0,
+            "found": False,
+            "error": f"Search timed out for '{pattern}'. Try a more specific keyword."
+        }
+    except Exception as e:
+        return {
+            "pattern": pattern,
+            "matches": [],
+            "total": 0,
+            "found": False,
+            "error": f"Search error for '{pattern}': {str(e)}"
+        }
 
 
 if __name__ == "__main__":
