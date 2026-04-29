@@ -10,6 +10,7 @@ from .tools.kconfig_tools import KconfigTools
 from .tools.type_tools import TypeTools
 from .tools.causal_tools import CausalTools
 from .tools.code_reader import CodeReader, VersionManager
+from .tools.request_logger import get_logger
 from ..retriever.hybrid_search import HybridSearcher
 from ..indexer.performance_indexer import PerformanceIndexer
 from ..storage.graph_store import GraphStore
@@ -29,6 +30,9 @@ INDEX_ROOT = _cfg.index_root
 # Initialize version manager and code reader
 version_mgr = VersionManager(INDEX_ROOT, REPO_PATH)
 code_reader = CodeReader(REPO_PATH)
+
+# Initialize request logger
+request_logger = get_logger()
 
 # Detect current version (dynamic, not hardcoded)
 CURRENT_VERSION = version_mgr.detect_current_version()
@@ -105,6 +109,9 @@ def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: in
         version: 版本标签（如 v6.19, v7.0），None 表示当前版本
     
     比 grep 更适合自然语言查询，会返回最相关的代码片段及行号。"""
+    import time
+    start_time = time.time()
+    
     # 根据版本选择索引
     idx_path = version_mgr.get_index_path(version) if version else INDEX_PATH
     
@@ -134,7 +141,7 @@ def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: in
         }
         results_list.append(item)
     
-    return {
+    response = {
         "query": query,
         "subsys": subsys,
         "version": version or CURRENT_VERSION,
@@ -142,6 +149,18 @@ def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: in
         "results": results_list,
         "found": len(results_list) > 0
     }
+    
+    # 记录日志
+    import time
+    duration_ms = (time.time() - start_time) * 1000
+    request_logger.log(
+        tool_name="kernel_search",
+        arguments={"query": query, "subsys": subsys, "version": version, "top_k": top_k},
+        response=response,
+        duration_ms=duration_ms
+    )
+    
+    return response
 
 
 @mcp.tool(name="kernel_define")
@@ -152,6 +171,9 @@ def kernel_define(symbol: str, repo: str = "linux", version: str = None) -> dict
         symbol: 符号名（如 schedule, struct task_struct）
         version: 版本标签（如 v6.19, v7.0），None 表示当前版本
     """
+    import time
+    start_time = time.time()
+    
     # 根据版本选择索引路径
     idx_path = version_mgr.get_index_path(version) if version else INDEX_PATH
     
@@ -172,7 +194,7 @@ def kernel_define(symbol: str, repo: str = "linux", version: str = None) -> dict
             version
         )
         
-        return {
+        response = {
             "symbol": r.chunk.name,
             "file_path": r.chunk.file_path,
             "line": r.chunk.start_line,
@@ -180,13 +202,24 @@ def kernel_define(symbol: str, repo: str = "linux", version: str = None) -> dict
             "version": version or CURRENT_VERSION,
             "found": True
         }
+    else:
+        response = {
+            "symbol": symbol,
+            "version": version or CURRENT_VERSION,
+            "found": False,
+            "error": f"Symbol '{symbol}' not found"
+        }
     
-    return {
-        "symbol": symbol,
-        "version": version or CURRENT_VERSION,
-        "found": False,
-        "error": f"Symbol '{symbol}' not found"
-    }
+    # 记录日志
+    duration_ms = (time.time() - start_time) * 1000
+    request_logger.log(
+        tool_name="kernel_define",
+        arguments={"symbol": symbol, "version": version},
+        response=response,
+        duration_ms=duration_ms
+    )
+    
+    return response
 
 
 @mcp.tool(name="kernel_callers")
