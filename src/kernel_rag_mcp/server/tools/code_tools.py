@@ -70,18 +70,47 @@ class CodeTools:
         
         chunks = []
         for r in results:
+            # 如果搜索结果没有代码内容，主动读取文件
+            content = r.code if r.code else ""
+            if not content and r.chunk.file_path and self.repo_path:
+                content = self._read_file_content(r.chunk.file_path, r.chunk.start_line, r.chunk.end_line)
+            
             chunks.append(CodeChunk(
                 file_path=r.chunk.file_path,
                 start_line=r.chunk.start_line,
                 end_line=r.chunk.end_line,
-                content=r.code[:500] if r.code else "",
+                content=content[:2000] if content else "",  # 增加到 2000 字符
             ))
         return chunks
+    
+    def _read_file_content(self, file_path: str, start_line: int, end_line: int) -> str:
+        """从服务端仓库读取文件内容"""
+        try:
+            full_path = self.repo_path / file_path
+            if not full_path.exists():
+                return ""
+            
+            with open(full_path, 'r', encoding='utf-8', errors='replace') as f:
+                lines = f.readlines()
+                start = max(0, start_line - 1)
+                end = min(len(lines), end_line if end_line > 0 else start_line + 50)
+                return ''.join(lines[start:end])
+        except Exception:
+            return ""
     
     def kernel_define(self, symbol: str) -> Optional[SymbolDef]:
         results = self.searcher.search(symbol, top_k=1)
         if results:
             r = results[0]
+            # 读取完整代码内容
+            content = r.code if r.code else ""
+            if not content and r.chunk.file_path and self.repo_path:
+                content = self._read_file_content(
+                    r.chunk.file_path, 
+                    r.chunk.start_line, 
+                    r.chunk.end_line
+                )
+            
             return SymbolDef(
                 name=r.chunk.name,
                 file_path=r.chunk.file_path,

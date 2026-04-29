@@ -63,6 +63,42 @@ class Config:
                 return f"v{major}.{minor}"
         return target
 
+    def detect_current_version(self) -> str:
+        """自动检测内核仓库当前版本"""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(self.kernel_repo), "describe", "--tags", "--abbrev=0"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                tag = result.stdout.strip()
+                # v7.0-rc6 -> v7.0
+                return self.get_version_ns(tag)
+        except Exception:
+            pass
+        
+        # 回退：尝试读取 Makefile
+        try:
+            makefile = self.kernel_repo / "Makefile"
+            if makefile.exists():
+                with open(makefile) as f:
+                    lines = f.readlines()
+                version = patch = sublevel = ""
+                for line in lines[:20]:
+                    if line.startswith("VERSION ="):
+                        version = line.split("=")[1].strip()
+                    elif line.startswith("PATCHLEVEL ="):
+                        patch = line.split("=")[1].strip()
+                    elif line.startswith("SUBLEVEL ="):
+                        sublevel = line.split("=")[1].strip()
+                if version and patch:
+                    return f"v{version}.{patch}"
+        except Exception:
+            pass
+        
+        return "v7.0"  # 默认回退
+
 
 _config: Optional[Config] = None
 

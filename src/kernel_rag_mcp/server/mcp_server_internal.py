@@ -99,7 +99,8 @@ def kernel_search(query: str, repo: str = "linux", subsys: str = None, top_k: in
             "file_path": r.file_path,
             "line": r.start_line,
             "name": r.file_path.split("/")[-1] if "/" in r.file_path else r.file_path,
-            "code_preview": r.content[:50] if r.content else ""
+            "code": r.content if r.content else "",
+            "end_line": r.end_line
         }
         results_list.append(item)
     
@@ -118,10 +119,44 @@ def kernel_define(symbol: str, repo: str = "linux") -> dict:
     result = code_tools.kernel_define(symbol)
     
     if result:
+        # 读取完整函数代码（最多500行，遇到函数结束符}停止）
+        code_content = ""
+        if result.file_path and REPO_PATH:
+            try:
+                file_path = REPO_PATH / result.file_path
+                if file_path.exists():
+                    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                        lines = f.readlines()
+                        start = max(0, result.line - 1)
+                        
+                        # 查找函数结束：遇到单独的 "}" 行（可能带注释）
+                        end = min(len(lines), start + 500)  # 最多500行上限
+                        brace_count = 0
+                        in_function = False
+                        
+                        for i in range(start, end):
+                            line = lines[i]
+                            # 统计花括号（粗略）
+                            brace_count += line.count('{')
+                            brace_count -= line.count('}')
+                            
+                            if '{' in line:
+                                in_function = True
+                            
+                            # 如果已经进入函数且花括号平衡，认为函数结束
+                            if in_function and brace_count <= 0 and i > start + 1:
+                                end = i + 1
+                                break
+                        
+                        code_content = ''.join(lines[start:end])
+            except Exception:
+                pass
+        
         return {
             "symbol": result.name,
             "file_path": result.file_path,
             "line": result.line,
+            "code": code_content,
             "found": True
         }
     
